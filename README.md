@@ -25,10 +25,30 @@ torrenttracker/
 └── iTorrent/          SwiftUI iOS app
 ```
 
+## Installing on your iPhone
+
+```bash
+git clone git@github.com:jannovy/itorrent.git
+cd itorrent
+./install.sh
+```
+
+The script checks Xcode, your signing certificate, the connected device and
+Developer Mode, then builds, signs and installs, explaining what to do if any
+of it is missing. `./install.sh --help` lists the options.
+
+It builds from source rather than installing the `.ipa` below, because it has
+to: an unsigned archive will not run on any device, and the provisioning
+profile that would make it run is issued by Apple against *your* Apple ID.
+Building is what lets `xcodebuild` request that profile for you.
+
 ## Download
 
 [**iTorrent 1.0 (.ipa, 2.0 MB)**](dist/iTorrent-1.0-unsigned.ipa) — `sha256
 e04e7acf6c5f73ca4837c5913a7f21c9fbb89671250fa31df8722c65a8ef0e97`
+
+For AltStore, SideStore or Sideloadly, which do their own signing. If you have
+a Mac, `./install.sh` above is less work.
 
 The build is **unsigned** on purpose. A signed development build would only
 install on the few devices in my provisioning profile, and the profile embedded
