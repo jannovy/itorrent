@@ -1,0 +1,128 @@
+import SwiftUI
+import TorrentKit
+
+struct SettingsView: View {
+	@Environment(TorrentStore.self) private var store
+	@Environment(\.dismiss) private var dismiss
+
+	@State private var draft = SessionSettings.default
+	@State private var downloadFolder: URL?
+
+	/// Speed limits are edited as a menu of sane values rather than a free text
+	/// field; typing bytes-per-second on a phone is nobody's idea of a good time.
+	private static let speedOptions: [Int] = [
+		0, 50_000, 100_000, 250_000, 500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000,
+	]
+
+	var body: some View {
+		NavigationStack {
+			Form {
+				Section {
+					LabeledContent("Incoming port") {
+						TextField("0 = automatic", value: $draft.listenPort, format: .number)
+							.keyboardType(.numberPad)
+							.multilineTextAlignment(.trailing)
+							.monospacedDigit()
+					}
+					Toggle("Distributed hash table", isOn: $draft.isDHTEnabled)
+					Toggle("Peer exchange", isOn: $draft.isPeerExchangeEnabled)
+				} header: {
+					Text("Network")
+				} footer: {
+					Text("DHT and peer exchange find peers without a tracker. Both are ignored for private torrents, which forbid them.")
+				}
+
+				Section {
+					speedPicker("Download limit", selection: $draft.downloadLimit)
+					speedPicker("Upload limit", selection: $draft.uploadLimit)
+				} header: {
+					Text("Speed limits")
+				} footer: {
+					Text("A download limit works by asking peers for fewer blocks, so the effective rate settles a little below the value you pick.")
+				}
+
+				Section("Connections") {
+					Stepper(
+						"Peers per torrent: \(draft.maximumPeersPerTorrent)",
+						value: $draft.maximumPeersPerTorrent,
+						in: 10...200,
+						step: 10
+					)
+					Stepper(
+						"Peers total: \(draft.maximumGlobalPeers)",
+						value: $draft.maximumGlobalPeers,
+						in: 20...500,
+						step: 20
+					)
+				}
+
+				Section {
+					Toggle("Keep screen awake", isOn: $draft.keepScreenAwakeWhileDownloading)
+				} header: {
+					Text("While downloading")
+				} footer: {
+					Text("iOS suspends the app as soon as the display sleeps, which stops transfers. This holds off the automatic lock while something is downloading, and releases it when everything is finished. Pressing the side button still locks the phone.")
+				}
+
+				Section("Seeding") {
+					Picker("Stop at ratio", selection: $draft.seedRatioLimit) {
+						Text("Never").tag(0.0)
+						Text("1.0").tag(1.0)
+						Text("1.5").tag(1.5)
+						Text("2.0").tag(2.0)
+						Text("5.0").tag(5.0)
+					}
+					Toggle("Add torrents paused", isOn: $draft.startTorrentsPaused)
+				}
+
+				Section {
+					if let downloadFolder {
+						LabeledValue("Downloads", downloadFolder.lastPathComponent)
+						Text(downloadFolder.path)
+							.font(.caption2)
+							.foregroundStyle(.secondary)
+							.textSelection(.enabled)
+					}
+				} header: {
+					Text("Storage")
+				} footer: {
+					Text("Downloads live in the app's Documents folder and are visible in Files under \"On My iPhone → Swarm\".")
+				}
+
+				Section("About") {
+					LabeledValue("Client", "Swarm 1.0")
+					LabeledValue("Peer ID prefix", PeerID.clientPrefix, isMonospaced: true)
+					LabeledValue("Protocols", "BEP 3, 5, 9, 10, 11, 12, 15, 23")
+				}
+			}
+			.navigationTitle("Settings")
+			.navigationBarTitleDisplayMode(.inline)
+			.toolbar {
+				ToolbarItem(placement: .cancellationAction) {
+					Button("Cancel") { dismiss() }
+				}
+				ToolbarItem(placement: .confirmationAction) {
+					Button("Save") {
+						Task {
+							await store.apply(settings: draft)
+							dismiss()
+						}
+					}
+					.disabled(draft == store.settings)
+				}
+			}
+			.task {
+				draft = store.settings
+				downloadFolder = await store.downloadFolder
+			}
+		}
+	}
+
+	private func speedPicker(_ title: String, selection: Binding<Int>) -> some View {
+		Picker(title, selection: selection) {
+			ForEach(Self.speedOptions, id: \.self) { value in
+				Text(value == 0 ? "Unlimited" : Format.rate(Double(value))).tag(value)
+			}
+		}
+	}
+}
