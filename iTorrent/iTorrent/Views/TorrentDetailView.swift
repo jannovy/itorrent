@@ -207,7 +207,7 @@ struct TorrentDetailView: View {
 				ContentUnavailableView(
 					"No peers connected",
 					systemImage: "person.2.slash",
-					description: Text("Swarm is still looking for peers through trackers and the DHT.")
+					description: Text("iTorrent is still looking for peers through trackers and the DHT.")
 				)
 			} else {
 				List(snapshot.peers) { peer in

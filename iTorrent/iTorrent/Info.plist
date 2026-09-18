@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Swarm</string>
+	<string>iTorrent</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -41,7 +41,7 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 
-	<!-- Downloaded content shows up in Files.app under "On My iPhone / Swarm". -->
+	<!-- Downloaded content shows up in Files.app under "On My iPhone / iTorrent". -->
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
@@ -57,7 +57,7 @@
 	</dict>
 
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Swarm finds peers on your local network so downloads can use the LAN instead of the internet.</string>
+	<string>iTorrent finds peers on your local network so downloads can use the LAN instead of the internet.</string>
 
 	<!-- Open .torrent files from Files, Mail and Safari. -->
 	<key>CFBundleDocumentTypes</key>

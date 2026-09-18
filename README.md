@@ -1,4 +1,4 @@
-# Swarm
+# iTorrent
 
 A BitTorrent client for iOS, written from scratch in Swift. No libtorrent, no
 C++, no third-party dependencies — the protocol stack is Swift and
@@ -7,7 +7,7 @@ Network.framework all the way down.
 ```
 torrenttracker/
 ├── TorrentKit/        Swift package: the engine (platform-agnostic, tested on macOS)
-└── Swarm/             SwiftUI iOS app
+└── iTorrent/          SwiftUI iOS app
 ```
 
 ## Running it
@@ -17,20 +17,20 @@ torrenttracker/
 cd TorrentKit && swift test
 
 # The app
-open Swarm/Swarm.xcodeproj      # then ⌘R
+open iTorrent/iTorrent.xcodeproj      # then ⌘R
 ```
 
 The project is set up for Jan's signing (team `3MB748S5UK`, bundle id
-`cz.jannovy.Swarm`). To build it on another machine or account, change
-`DEVELOPMENT_TEAM` and `PRODUCT_BUNDLE_IDENTIFIER` in the Swarm target's build
+`cz.jannovy.iTorrent`). To build it on another machine or account, change
+`DEVELOPMENT_TEAM` and `PRODUCT_BUNDLE_IDENTIFIER` in the iTorrent target's build
 settings. A free Apple ID works too, but then the signature expires after seven
 days.
 
 ```bash
 # Install on a connected device
-xcodebuild -project Swarm/Swarm.xcodeproj -scheme Swarm -configuration Debug \
+xcodebuild -project iTorrent/iTorrent.xcodeproj -scheme iTorrent -configuration Debug \
   -destination 'generic/platform=iOS' -allowProvisioningUpdates -derivedDataPath build
-xcrun devicectl device install app --device <udid> build/Build/Products/Debug-iphoneos/Swarm.app
+xcrun devicectl device install app --device <udid> build/Build/Products/Debug-iphoneos/iTorrent.app
 ```
 
 ## What it implements
@@ -121,7 +121,7 @@ There is also a live smoke test against the public network, off by default
 because it depends on strangers' upload slots:
 
 ```bash
-SWARM_LIVE_TESTS=1 SWARM_LIVE_MAGNET='magnet:?xt=urn:btih:…' \
+ITORRENT_LIVE_TESTS=1 ITORRENT_LIVE_MAGNET='magnet:?xt=urn:btih:…' \
   swift test --filter downloadsFromRealSwarm
 ```
 
@@ -129,7 +129,7 @@ SWARM_LIVE_TESTS=1 SWARM_LIVE_MAGNET='magnet:?xt=urn:btih:…' \
 
 ```bash
 xcrun simctl spawn booted log stream --level debug \
-  --predicate 'subsystem == "dev.swarm.torrentkit"'
+  --predicate 'subsystem == "dev.itorrent.torrentkit"'
 ```
 
 Categories: `session`, `torrent`, `peer`, `tracker`, `dht`, `storage`.
@@ -137,7 +137,7 @@ Categories: `session`, `torrent`, `peer`, `tracker`, `dht`, `storage`.
 ## iOS specifics
 
 - Downloads go to `Documents/Downloads` and are visible in Files under
-  "On My iPhone → Swarm" (`UIFileSharingEnabled`).
+  "On My iPhone → iTorrent" (`UIFileSharingEnabled`).
 - Torrent data is excluded from iCloud backups; Apple rejects apps that back up
   re-downloadable content.
 - ATS is disabled (`NSAllowsArbitraryLoads`) because most trackers are still
@@ -154,6 +154,16 @@ Categories: `session`, `torrent`, `peer`, `tracker`, `dht`, `storage`.
   the screen on. Pressing the side button still locks the phone and still stops
   the transfer. The status bar shows a sun icon whenever the lock is being held,
   so the behaviour is never a mystery.
+
+## The icon
+
+Generated, not hand-drawn, so it can be regenerated rather than being a binary
+nobody can edit:
+
+```bash
+swiftc -O -parse-as-library Tools/GenerateAppIcon.swift -o /tmp/genicon
+/tmp/genicon iTorrent/iTorrent/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+```
 
 ## Legal
 

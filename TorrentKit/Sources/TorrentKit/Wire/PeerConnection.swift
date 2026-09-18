@@ -61,7 +61,7 @@ public final class PeerConnection: @unchecked Sendable {
 		self.address = address
 		self.role = role
 		self.localPeerID = localPeerID
-		self.queue = DispatchQueue(label: "swarm.peer.\(address.description)")
+		self.queue = DispatchQueue(label: "itorrent.peer.\(address.description)")
 
 		let parameters = NWParameters.tcp
 		parameters.prohibitExpensivePaths = false
@@ -79,7 +79,7 @@ public final class PeerConnection: @unchecked Sendable {
 		self.address = address
 		self.role = .incoming
 		self.localPeerID = localPeerID
-		self.queue = DispatchQueue(label: "swarm.peer.in.\(address.description)")
+		self.queue = DispatchQueue(label: "itorrent.peer.in.\(address.description)")
 		self.connection = connection
 	}
 
@@ -333,7 +333,7 @@ public final class PeerListener: @unchecked Sendable {
 		public let address: PeerAddress
 	}
 
-	private let queue = DispatchQueue(label: "swarm.listener")
+	private let queue = DispatchQueue(label: "itorrent.listener")
 	private var listener: NWListener?
 	private var continuation: AsyncStream<Incoming>.Continuation?
 

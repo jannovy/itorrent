@@ -82,7 +82,7 @@ enum Fixtures {
 		var root: [String: BencodeValue] = [
 			"announce": .bytes(Data(announce.utf8)),
 			"comment": .bytes(Data("fixture".utf8)),
-			"created by": .bytes(Data("SwarmTests".utf8)),
+			"created by": .bytes(Data("iTorrentTests".utf8)),
 			"creation date": .integer(1_700_000_000),
 			"info": .dictionary([
 				"name": .bytes(Data("sample.bin".utf8)),

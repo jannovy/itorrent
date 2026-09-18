@@ -86,11 +86,11 @@ struct SettingsView: View {
 				} header: {
 					Text("Storage")
 				} footer: {
-					Text("Downloads live in the app's Documents folder and are visible in Files under \"On My iPhone → Swarm\".")
+					Text("Downloads live in the app's Documents folder and are visible in Files under \"On My iPhone → iTorrent\".")
 				}
 
 				Section("About") {
-					LabeledValue("Client", "Swarm 1.0")
+					LabeledValue("Client", "iTorrent 1.0")
 					LabeledValue("Peer ID prefix", PeerID.clientPrefix, isMonospaced: true)
 					LabeledValue("Protocols", "BEP 3, 5, 9, 10, 11, 12, 15, 23")
 				}

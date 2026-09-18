@@ -11,26 +11,26 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		AA0000000000000000000101 /* Swarm.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Swarm.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000101 /* iTorrent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iTorrent.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		AA0000000000000000000111 /* Exceptions for "Swarm" folder in "Swarm" target */ = {
+		AA0000000000000000000111 /* Exceptions for "iTorrent" folder in "iTorrent" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = AA0000000000000000000130 /* Swarm */;
+			target = AA0000000000000000000130 /* iTorrent */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		AA0000000000000000000110 /* Swarm */ = {
+		AA0000000000000000000110 /* iTorrent */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				AA0000000000000000000111 /* Exceptions for "Swarm" folder in "Swarm" target */,
+				AA0000000000000000000111 /* Exceptions for "iTorrent" folder in "iTorrent" target */,
 			);
-			path = Swarm;
+			path = iTorrent;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -50,7 +50,7 @@
 		AA0000000000000000000100 = {
 			isa = PBXGroup;
 			children = (
-				AA0000000000000000000110 /* Swarm */,
+				AA0000000000000000000110 /* iTorrent */,
 				AA0000000000000000000102 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -58,7 +58,7 @@
 		AA0000000000000000000102 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				AA0000000000000000000101 /* Swarm.app */,
+				AA0000000000000000000101 /* iTorrent.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -66,9 +66,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		AA0000000000000000000130 /* Swarm */ = {
+		AA0000000000000000000130 /* iTorrent */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = AA0000000000000000000150 /* Build configuration list for PBXNativeTarget "Swarm" */;
+			buildConfigurationList = AA0000000000000000000150 /* Build configuration list for PBXNativeTarget "iTorrent" */;
 			buildPhases = (
 				AA0000000000000000000121 /* Sources */,
 				AA0000000000000000000120 /* Frameworks */,
@@ -79,14 +79,14 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				AA0000000000000000000110 /* Swarm */,
+				AA0000000000000000000110 /* iTorrent */,
 			);
-			name = Swarm;
+			name = iTorrent;
 			packageProductDependencies = (
 				AA0000000000000000000200 /* TorrentKit */,
 			);
-			productName = Swarm;
-			productReference = AA0000000000000000000101 /* Swarm.app */;
+			productName = iTorrent;
+			productReference = AA0000000000000000000101 /* iTorrent.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -104,7 +104,7 @@
 					};
 				};
 			};
-			buildConfigurationList = AA0000000000000000000140 /* Build configuration list for PBXProject "Swarm" */;
+			buildConfigurationList = AA0000000000000000000140 /* Build configuration list for PBXProject "iTorrent" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -121,7 +121,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				AA0000000000000000000130 /* Swarm */,
+				AA0000000000000000000130 /* iTorrent */,
 			);
 		};
 /* End PBXProject section */
@@ -215,13 +215,13 @@
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Swarm/Info.plist;
+				INFOPLIST_FILE = iTorrent/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = cz.jannovy.Swarm;
+				PRODUCT_BUNDLE_IDENTIFIER = cz.jannovy.iTorrent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -239,13 +239,13 @@
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Swarm/Info.plist;
+				INFOPLIST_FILE = iTorrent/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = cz.jannovy.Swarm;
+				PRODUCT_BUNDLE_IDENTIFIER = cz.jannovy.iTorrent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -255,7 +255,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		AA0000000000000000000140 /* Build configuration list for PBXProject "Swarm" */ = {
+		AA0000000000000000000140 /* Build configuration list for PBXProject "iTorrent" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AA0000000000000000000141 /* Debug */,
@@ -264,7 +264,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		AA0000000000000000000150 /* Build configuration list for PBXNativeTarget "Swarm" */ = {
+		AA0000000000000000000150 /* Build configuration list for PBXNativeTarget "iTorrent" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AA0000000000000000000151 /* Debug */,

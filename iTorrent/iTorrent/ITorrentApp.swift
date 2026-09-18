@@ -2,7 +2,7 @@ import SwiftUI
 import TorrentKit
 
 @main
-struct SwarmApp: App {
+struct ITorrentApp: App {
 	@State private var store = TorrentStore()
 	@Environment(\.scenePhase) private var scenePhase
 

@@ -44,7 +44,7 @@ public struct InfoHash: Hashable, Sendable, CustomStringConvertible {
 /// Our own 20-byte peer id. Uses the Azureus-style convention: `-SW0100-` plus
 /// twelve random bytes, so remote clients can identify us in their peer lists.
 public struct PeerID: Hashable, Sendable {
-	public static let clientPrefix = "-SW1000-"
+	public static let clientPrefix = "-IT1000-"
 
 	public let raw: Data
 
@@ -145,7 +145,7 @@ enum PeerIDDecoder {
 		"AZ": "Azureus", "BT": "BitTorrent", "DE": "Deluge", "LT": "libtorrent",
 		"lt": "libTorrent", "qB": "qBittorrent", "TR": "Transmission", "UT": "µTorrent",
 		"UM": "µTorrent Mac", "UW": "µTorrent Web", "KT": "KTorrent", "TL": "Tribler",
-		"FD": "Free Download Manager", "WW": "WebTorrent", "SW": "Swarm", "BL": "BitComet",
+		"FD": "Free Download Manager", "WW": "WebTorrent", "IT": "iTorrent", "BL": "BitComet",
 		"RT": "Retriever", "PI": "PicoTorrent", "XL": "Xunlei", "AN": "Ares",
 	]
 

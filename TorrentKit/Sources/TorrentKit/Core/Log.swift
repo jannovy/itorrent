@@ -8,10 +8,10 @@ import os
 /// stuck download can be traced without turning on everything at once:
 ///
 /// ```
-/// xcrun simctl spawn booted log stream --predicate 'subsystem == "dev.swarm.torrentkit"'
+/// xcrun simctl spawn booted log stream --predicate 'subsystem == "dev.itorrent.torrentkit"'
 /// ```
 public enum Log {
-	public static let subsystem = "dev.swarm.torrentkit"
+	public static let subsystem = "dev.itorrent.torrentkit"
 
 	public static let session = Logger(subsystem: subsystem, category: "session")
 	public static let torrent = Logger(subsystem: subsystem, category: "torrent")

@@ -61,7 +61,7 @@ public struct TorrentPersistentState: Codable, Sendable, Equatable {
 /// On-disk layout for the session:
 ///
 /// ```
-/// Application Support/Swarm/
+/// Application Support/iTorrent/
 ///   settings.json
 ///   dht-nodes.json
 ///   torrents/<info-hash>/state.json
@@ -79,7 +79,7 @@ public struct SessionStore: Sendable {
 
 	public static func defaultStore() -> SessionStore {
 		let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-		return SessionStore(rootURL: support.appendingPathComponent("Swarm", isDirectory: true))
+		return SessionStore(rootURL: support.appendingPathComponent("iTorrent", isDirectory: true))
 	}
 
 	public var torrentsDirectory: URL { rootURL.appendingPathComponent("torrents", isDirectory: true) }

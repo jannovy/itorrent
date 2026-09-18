@@ -23,7 +23,7 @@ public struct HTTPTracker: TrackerClient {
 		}
 
 		var urlRequest = URLRequest(url: requestURL)
-		urlRequest.setValue("Swarm/1.0", forHTTPHeaderField: "User-Agent")
+		urlRequest.setValue("iTorrent/1.0", forHTTPHeaderField: "User-Agent")
 		urlRequest.setValue("*/*", forHTTPHeaderField: "Accept")
 
 		let (data, response) = try await Self.session.data(for: urlRequest)

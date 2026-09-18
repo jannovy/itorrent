@@ -9,7 +9,7 @@ import Foundation
 /// dispatch read source is both simpler and far cheaper here.
 final class DatagramSocket: @unchecked Sendable {
 	private let descriptor: Int32
-	private let queue = DispatchQueue(label: "swarm.dht.socket")
+	private let queue = DispatchQueue(label: "itorrent.dht.socket")
 	private var readSource: DispatchSourceRead?
 	private var isClosed = false
 

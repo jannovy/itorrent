@@ -4,25 +4,25 @@ import Testing
 
 /// Smoke tests against the real BitTorrent network.
 ///
-/// Disabled unless `SWARM_LIVE_TESTS=1` is set: they depend on a public tracker,
+/// Disabled unless `ITORRENT_LIVE_TESTS=1` is set: they depend on a public tracker,
 /// the DHT and strangers' upload slots, none of which belong in a normal test
 /// run. Run them by hand when changing the wire protocol, the tracker clients
 /// or the DHT, because nothing else proves we interoperate with other clients.
 @Suite(
 	"Live network",
-	.enabled(if: ProcessInfo.processInfo.environment["SWARM_LIVE_TESTS"] == "1"),
+	.enabled(if: ProcessInfo.processInfo.environment["ITORRENT_LIVE_TESTS"] == "1"),
 	.timeLimit(.minutes(5))
 )
 struct LiveNetworkTests {
 
 	/// Debian's official netinst image: a large, well-seeded, freely
 	/// redistributable torrent with a public HTTP tracker.
-	private static let magnetLink = ProcessInfo.processInfo.environment["SWARM_LIVE_MAGNET"] ?? ""
+	private static let magnetLink = ProcessInfo.processInfo.environment["ITORRENT_LIVE_MAGNET"] ?? ""
 
 	@Test("Fetches metadata and real pieces from strangers")
 	func downloadsFromRealSwarm() async throws {
 		guard !Self.magnetLink.isEmpty else {
-			Issue.record("Set SWARM_LIVE_MAGNET to a magnet link to run this test")
+			Issue.record("Set ITORRENT_LIVE_MAGNET to a magnet link to run this test")
 			return
 		}
 

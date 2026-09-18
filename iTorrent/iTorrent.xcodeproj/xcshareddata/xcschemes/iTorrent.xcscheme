@@ -6,9 +6,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "AA0000000000000000000130"
-               BuildableName = "Swarm.app"
-               BlueprintName = "Swarm"
-               ReferencedContainer = "container:Swarm.xcodeproj">
+               BuildableName = "iTorrent.app"
+               BlueprintName = "iTorrent"
+               ReferencedContainer = "container:iTorrent.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -22,9 +22,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AA0000000000000000000130"
-            BuildableName = "Swarm.app"
-            BlueprintName = "Swarm"
-            ReferencedContainer = "container:Swarm.xcodeproj">
+            BuildableName = "iTorrent.app"
+            BlueprintName = "iTorrent"
+            ReferencedContainer = "container:iTorrent.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -33,9 +33,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AA0000000000000000000130"
-            BuildableName = "Swarm.app"
-            BlueprintName = "Swarm"
-            ReferencedContainer = "container:Swarm.xcodeproj">
+            BuildableName = "iTorrent.app"
+            BlueprintName = "iTorrent"
+            ReferencedContainer = "container:iTorrent.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

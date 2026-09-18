@@ -21,7 +21,7 @@ struct TorrentListView: View {
 					list
 				}
 			}
-			.navigationTitle("Swarm")
+			.navigationTitle("iTorrent")
 			.safeAreaInset(edge: .bottom, spacing: 0) {
 				SessionStatusBar(
 					statistics: store.statistics,

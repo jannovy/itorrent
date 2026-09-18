@@ -135,7 +135,7 @@ public final class UDPTracker: TrackerClient, @unchecked Sendable {
 /// A one-shot UDP request/response socket.
 final class UDPSocket: @unchecked Sendable {
 	private let connection: NWConnection
-	private let queue = DispatchQueue(label: "swarm.udp")
+	private let queue = DispatchQueue(label: "itorrent.udp")
 
 	init(host: String, port: UInt16) {
 		let endpoint = NWEndpoint.hostPort(
