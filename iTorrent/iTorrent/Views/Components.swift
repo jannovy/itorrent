@@ -130,3 +130,41 @@ struct EmptyTorrentsView: View {
 		}
 	}
 }
+
+/// One web seed in the trackers tab: its state, what it has contributed, and
+/// why it stopped if it did.
+struct WebSeedRow: View {
+	let seed: WebSeedStatus
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 4) {
+			HStack {
+				Circle()
+					.fill(seed.isEnabled ? Color.green : Color.secondary)
+					.frame(width: 8, height: 8)
+				Text(seed.url)
+					.font(.system(.caption, design: .monospaced))
+					.lineLimit(1)
+					.truncationMode(.middle)
+				Spacer()
+				if seed.piecesInFlight > 0 {
+					Text("\(seed.piecesInFlight)")
+						.font(.caption.monospacedDigit())
+						.foregroundStyle(.secondary)
+				}
+			}
+
+			HStack(spacing: 8) {
+				Text(Format.bytes(seed.downloadedBytes))
+					.foregroundStyle(.secondary)
+				if let error = seed.lastError {
+					Text(error)
+						.foregroundStyle(seed.isEnabled ? Color.secondary : Color.red)
+						.lineLimit(1)
+				}
+			}
+			.font(.caption2)
+		}
+		.padding(.vertical, 2)
+	}
+}

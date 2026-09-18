@@ -90,6 +90,7 @@ xcrun devicectl device install app --device <udid> build/Build/Products/Debug-ip
 | 11 | Peer exchange (PEX) | `Wire/ExtensionProtocol.swift` |
 | 12 | Multi-tracker announce lists | `Tracker/TrackerManager.swift` |
 | 15 | UDP trackers | `Tracker/UDPTracker.swift` |
+| 19 | Web seeds (HTTP `Range` requests) | `WebSeed/` |
 | 23 | Compact peer lists | `Wire/PeerAddress.swift` |
 | 47 | Padding files | `Model/Metainfo.swift` |
 
@@ -100,8 +101,7 @@ failing it, sparse file allocation, resume data, seeding, speed limits, and
 inbound connections so the client is reachable rather than connect-only.
 
 Not implemented: BitTorrent v2 (`urn:btmh:`), µTP, protocol encryption,
-WebTorrent/WSS trackers, web seeds, local peer discovery, and sequential
-download.
+WebTorrent/WSS trackers, local peer discovery, and sequential download.
 
 ## How it is put together
 
@@ -151,18 +151,26 @@ port nobody could dial, and every connection had to be one we opened ourselves.
 The session waits for the port, and pushes it into every torrent (with a
 re-announce) whenever it changes.
 
+**Web seeds needed something that already existed.** Mapping a piece onto the
+files it spans was inside `TorrentStorage`; a web seed needs the same mapping
+to turn a piece into HTTP range requests, so it moved to `TorrentMetainfo`
+rather than being written twice. A piece a web seed has claimed is reserved in
+the `PiecePicker`, so peers do not fetch it in parallel.
+
 **The DHT uses a BSD socket, not `NWConnection`.** The DHT talks to thousands
 of short-lived addresses from one local port; Network.framework models UDP as
 a connection per remote endpoint, which would mean thousands of objects.
 
 ## Tests
 
-`swift test` runs 71 tests. The ones that matter are in `TransferTests`: they
+`swift test` runs 79 tests. The ones that matter are in `TransferTests`: they
 stand up two real sessions on real sockets and move a real torrent between
 them over loopback — single-file, multi-file with pieces straddling file
 boundaries, a magnet link resolving its metadata over `ut_metadata`, and a
 resume from persisted state. `PeerBanTests` adds a peer that answers every
-request with zeroes, which must be banned and disconnected.
+request with zeroes, which must be banned and disconnected. `WebSeedTests`
+stands up a real HTTP server that honours `Range` — including one that ignores
+it — and downloads a torrent with no peers whatsoever in full.
 
 There is also a live smoke test against the public network, off by default
 because it depends on strangers' upload slots:
@@ -187,8 +195,8 @@ Categories: `session`, `torrent`, `peer`, `tracker`, `dht`, `storage`.
   "On My iPhone → iTorrent" (`UIFileSharingEnabled`).
 - Torrent data is excluded from iCloud backups; Apple rejects apps that back up
   re-downloadable content.
-- ATS is disabled (`NSAllowsArbitraryLoads`) because most trackers are still
-  plain HTTP and peer connections are raw TCP. Shipping this on the App Store
+- ATS is disabled (`NSAllowsArbitraryLoads`) because most trackers and web
+  seeds are still plain HTTP and peer connections are raw TCP. Shipping this on the App Store
   would need a justification — for sideloading it is fine.
 - `magnet:` links and `.torrent` files open the app.
 - There is no background mode. iOS gives no legitimate background execution for

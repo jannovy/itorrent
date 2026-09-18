@@ -49,6 +49,36 @@ public struct TorrentMetainfo: Sendable, Equatable {
 		let start = Int64(index) * Int64(pieceLength)
 		return start..<(start + Int64(pieceSize(at: index)))
 	}
+
+	/// One file's share of a range of the torrent's flat byte stream.
+	public struct Segment: Sendable {
+		public let file: TorrentFile
+		/// Where the bytes sit inside that file.
+		public let insideFile: Range<Int64>
+		/// Where they sit in a buffer covering the requested range.
+		public let insideBuffer: Range<Int>
+	}
+
+	/// Splits a range of the torrent's byte stream into per-file segments.
+	///
+	/// Both the disk layer and the web seed client need this, and a piece that
+	/// straddles a file boundary is exactly the case that is easy to get wrong
+	/// twice in two places.
+	public func segments(forByteRange range: Range<Int64>) -> [Segment] {
+		var result: [Segment] = []
+		for file in files where file.length > 0 {
+			let overlapStart = max(range.lowerBound, file.range.lowerBound)
+			let overlapEnd = min(range.upperBound, file.range.upperBound)
+			guard overlapStart < overlapEnd else { continue }
+
+			result.append(Segment(
+				file: file,
+				insideFile: (overlapStart - file.offset)..<(overlapEnd - file.offset),
+				insideBuffer: Int(overlapStart - range.lowerBound)..<Int(overlapEnd - range.lowerBound)
+			))
+		}
+		return result
+	}
 }
 
 public enum MetainfoError: Error, LocalizedError {

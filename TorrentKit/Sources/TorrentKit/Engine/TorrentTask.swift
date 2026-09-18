@@ -58,6 +58,10 @@ public actor TorrentTask {
 	private var storage: TorrentStorage?
 	private var picker: PiecePicker?
 	private var trackers: TrackerManager
+	private let webSeeds = WebSeedManager()
+	/// URLs from the metainfo's `url-list` or the magnet's `ws` parameters,
+	/// kept until the metadata arrives and the file layout is known.
+	private var webSeedURLs: [String] = []
 	/// Mirror of the tracker list, kept because `persistentState()` is
 	/// synchronous and cannot await the tracker actor.
 	private var knownTrackerURLs: [String] = []
@@ -118,10 +122,12 @@ public actor TorrentTask {
 		case let .metainfo(metainfo):
 			self.metainfo = metainfo
 			tiers = metainfo.trackerTiers
+			self.webSeedURLs = metainfo.webSeeds
 		case let .magnet(magnet):
 			self.magnet = magnet
 			tiers = magnet.trackers.isEmpty ? [] : [magnet.trackers]
 			self.candidatePeers = magnet.peerHints
+			self.webSeedURLs = magnet.webSeeds
 		}
 		if let extra = restoredState?.trackers, !extra.isEmpty {
 			tiers.append(extra)
@@ -208,6 +214,13 @@ public actor TorrentTask {
 		}
 		peers.removeAll()
 		connectingCount = 0
+		// A fetch already in the air will be discarded on delivery; releasing
+		// the reservations now stops those pieces from being unclaimable after
+		// the torrent resumes.
+		for index in webSeeds.allPiecesInFlight() {
+			picker?.releaseWebSeedReservation(index)
+		}
+		webSeeds.reset()
 		resetDiscoveryGuards()
 		downloadMeter.reset()
 		uploadMeter.reset()
@@ -230,6 +243,9 @@ public actor TorrentTask {
 		self.storage = storage
 		self.picker = picker
 		applyFilePriorities()
+		// The metainfo's own list and the magnet's `ws` parameters are both
+		// valid sources and a torrent added as a magnet only ever has the latter.
+		webSeeds.configure(urls: webSeedURLs + metainfo.webSeeds, metainfo: metainfo)
 
 		let hasExistingFiles = await storage.anyFileExists()
 		if needsCheck || (resumeBitfield == nil && hasExistingFiles) {
@@ -294,6 +310,7 @@ public actor TorrentTask {
 		// and blocks flowing.
 		startAnnounceIfNeeded()
 		startDHTDiscoveryIfNeeded(settings: settings)
+		startWebSeedFetchesIfNeeded(settings: settings)
 		await updateChokingIfNeeded()
 		await requestBlocks()
 		sendKeepAlives()
@@ -316,7 +333,7 @@ public actor TorrentTask {
 			totalDownload += peer.downloadedBytes
 			totalUpload += peer.uploadedBytes
 		}
-		downloadMeter.update(total: sessionDownloadedBytes + totalDownload, now: now)
+		downloadMeter.update(total: sessionDownloadedBytes + totalDownload + webSeeds.downloadedBytes, now: now)
 		uploadMeter.update(total: uploadedBytes, now: now)
 	}
 
@@ -428,6 +445,97 @@ public actor TorrentTask {
 		if candidatePeers.count > 500 {
 			candidatePeers.removeFirst(candidatePeers.count - 500)
 		}
+	}
+
+	// MARK: - Web seeds
+
+	/// Hands idle web seeds a piece to fetch.
+	///
+	/// Like announces and DHT lookups, the fetch runs beside the tick rather
+	/// than inside it: an HTTP server that accepts the connection and then says
+	/// nothing for thirty seconds must not be able to stop the heartbeat.
+	/// Refills the web seeds' queues as soon as one finishes, rather than
+	/// leaving them idle until the next tick: at a second per piece a web seed
+	/// would be throttled to the tick rate rather than to the network.
+	private func pumpWebSeeds() async {
+		guard !webSeeds.isEmpty else { return }
+		startWebSeedFetchesIfNeeded(settings: await environment.currentSettings())
+	}
+
+	private func startWebSeedFetchesIfNeeded(settings: SessionSettings) {
+		guard settings.areWebSeedsEnabled, !webSeeds.isEmpty, !status.isPaused else { return }
+		guard let picker, !picker.isComplete else { return }
+
+		while webSeeds.hasCapacity, let client = webSeeds.nextAvailableSeed() {
+			guard let index = picker.reservePieceForWebSeed() else { return }
+			webSeeds.markStarted(piece: index, on: client.baseURL)
+			Task { [weak self] in
+				await self?.runWebSeedFetch(piece: index, client: client)
+			}
+		}
+	}
+
+	private func runWebSeedFetch(piece index: Int, client: WebSeedClient) async {
+		do {
+			let data = try await client.fetch(piece: index)
+			// Web seeds are not choked and cannot be asked to slow down, so the
+			// limiter is applied after the fact: the next piece simply waits.
+			let limiter = await environment.downloadLimiter()
+			await limiter.consume(data.count)
+			await deliverWebSeedPiece(index: index, data: data, from: client.baseURL)
+		} catch {
+			await failWebSeedPiece(index: index, from: client.baseURL, error: error)
+		}
+		await pumpWebSeeds()
+	}
+
+	private func deliverWebSeedPiece(index: Int, data: Data, from url: String) async {
+		guard let picker, let storage, let metainfo else { return }
+		defer { picker.releaseWebSeedReservation(index) }
+
+		guard data.count == metainfo.pieceSize(at: index) else {
+			webSeeds.markFailed(piece: index, on: url, error: "Wrong piece length")
+			return
+		}
+		guard Data(Insecure.SHA1.hash(data: data)) == metainfo.pieceHashes[index] else {
+			Log.torrent.warning("Web seed \(url, privacy: .public) served a corrupt piece \(index)")
+			webSeeds.markFailed(piece: index, on: url, error: "Piece \(index) failed its hash check")
+			return
+		}
+		guard !picker.have[index] else {
+			// Peers beat the web seed to it; the bytes are simply redundant.
+			webSeeds.markSucceeded(piece: index, byteCount: 0, on: url)
+			return
+		}
+
+		do {
+			try await storage.write(piece: index, data: data)
+		} catch {
+			Log.storage.error("Web seed write failed: \(error.localizedDescription, privacy: .public)")
+			webSeeds.markFailed(piece: index, on: url, error: error.localizedDescription)
+			return
+		}
+
+		webSeeds.markSucceeded(piece: index, byteCount: data.count, on: url)
+		picker.markVerified(piece: index)
+		downloadedBytes = picker.downloadedBytes
+
+		for peer in peers.values {
+			peer.connection.send(.have(pieceIndex: index))
+		}
+		for peer in peers.values {
+			await updateInterest(in: peer)
+		}
+		if picker.isComplete {
+			await storage.flush()
+			await persistState()
+		}
+	}
+
+	private func failWebSeedPiece(index: Int, from url: String, error: Error) async {
+		picker?.releaseWebSeedReservation(index)
+		webSeeds.markFailed(piece: index, on: url, error: error.localizedDescription)
+		Log.torrent.debug("Web seed \(url, privacy: .public) failed piece \(index): \(error.localizedDescription, privacy: .public)")
 	}
 
 	private func maintainPeerConnections(settings: SessionSettings) async {
@@ -1153,6 +1261,7 @@ public actor TorrentTask {
 			trackers: trackerStatuses,
 			peers: peerSnapshots,
 			files: files,
+			webSeeds: webSeeds.statuses(),
 			errorMessage: errorMessage
 		)
 		snapshotCache.value = snapshot

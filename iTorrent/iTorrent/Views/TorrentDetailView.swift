@@ -286,6 +286,18 @@ struct TorrentDetailView: View {
 				}
 			}
 
+			if !snapshot.webSeeds.isEmpty {
+				Section {
+					ForEach(snapshot.webSeeds, id: \.url) { seed in
+						WebSeedRow(seed: seed)
+					}
+				} header: {
+					Text("\(snapshot.webSeeds.count) web seed(s)")
+				} footer: {
+					Text("Web seeds are plain HTTP servers holding the same files, used alongside the swarm.")
+				}
+			}
+
 			Section("Add tracker") {
 				HStack {
 					TextField("udp://tracker.example:1337/announce", text: $newTrackerURL)

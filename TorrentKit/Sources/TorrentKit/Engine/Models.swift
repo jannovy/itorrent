@@ -100,6 +100,7 @@ public struct TorrentSnapshot: Sendable, Identifiable, Hashable {
 	public let trackers: [TrackerStatus]
 	public let peers: [PeerSnapshot]
 	public let files: [FileSnapshot]
+	public let webSeeds: [WebSeedStatus]
 	public let errorMessage: String?
 
 	public var id: InfoHash { infoHash }
@@ -156,6 +157,9 @@ public struct SessionSettings: Sendable, Codable, Equatable {
 	public var isDHTEnabled: Bool
 	public var isPeerExchangeEnabled: Bool
 	public var isLocalDiscoveryEnabled: Bool
+	/// BEP 19 web seeds. On by default: a torrent whose swarm has died still
+	/// downloads at full speed from the HTTP server that published it.
+	public var areWebSeedsEnabled: Bool
 	public var maximumPeersPerTorrent: Int
 	public var maximumGlobalPeers: Int
 	public var maximumActiveTorrents: Int
@@ -178,6 +182,7 @@ public struct SessionSettings: Sendable, Codable, Equatable {
 		isDHTEnabled: true,
 		isPeerExchangeEnabled: true,
 		isLocalDiscoveryEnabled: false,
+		areWebSeedsEnabled: true,
 		maximumPeersPerTorrent: 50,
 		maximumGlobalPeers: 200,
 		maximumActiveTorrents: 5,
@@ -193,6 +198,7 @@ public struct SessionSettings: Sendable, Codable, Equatable {
 		isDHTEnabled: Bool,
 		isPeerExchangeEnabled: Bool,
 		isLocalDiscoveryEnabled: Bool,
+		areWebSeedsEnabled: Bool,
 		maximumPeersPerTorrent: Int,
 		maximumGlobalPeers: Int,
 		maximumActiveTorrents: Int,
@@ -206,6 +212,7 @@ public struct SessionSettings: Sendable, Codable, Equatable {
 		self.isDHTEnabled = isDHTEnabled
 		self.isPeerExchangeEnabled = isPeerExchangeEnabled
 		self.isLocalDiscoveryEnabled = isLocalDiscoveryEnabled
+		self.areWebSeedsEnabled = areWebSeedsEnabled
 		self.maximumPeersPerTorrent = maximumPeersPerTorrent
 		self.maximumGlobalPeers = maximumGlobalPeers
 		self.maximumActiveTorrents = maximumActiveTorrents
@@ -238,6 +245,7 @@ public struct SessionSettings: Sendable, Codable, Equatable {
 		isDHTEnabled = value(.isDHTEnabled, fallback.isDHTEnabled)
 		isPeerExchangeEnabled = value(.isPeerExchangeEnabled, fallback.isPeerExchangeEnabled)
 		isLocalDiscoveryEnabled = value(.isLocalDiscoveryEnabled, fallback.isLocalDiscoveryEnabled)
+		areWebSeedsEnabled = value(.areWebSeedsEnabled, fallback.areWebSeedsEnabled)
 		maximumPeersPerTorrent = value(.maximumPeersPerTorrent, fallback.maximumPeersPerTorrent)
 		maximumGlobalPeers = value(.maximumGlobalPeers, fallback.maximumGlobalPeers)
 		maximumActiveTorrents = value(.maximumActiveTorrents, fallback.maximumActiveTorrents)

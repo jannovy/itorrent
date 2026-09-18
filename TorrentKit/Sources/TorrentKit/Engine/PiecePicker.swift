@@ -62,6 +62,9 @@ public final class PiecePicker {
 	private var partials: [Int: PartialPiece] = [:]
 	private var inFlight: [BlockRequest: InFlight] = [:]
 	private var failedHashChecks: [Int: Int] = [:]
+	/// Pieces a web seed has taken on. They are fetched whole and out of band,
+	/// so peers must not start them as well.
+	private var reservedForWebSeeds: Set<Int> = []
 
 	public init(metainfo: TorrentMetainfo, have: BitField? = nil) {
 		self.pieceCount = metainfo.pieceCount
@@ -238,7 +241,8 @@ public final class PiecePicker {
 	private func selectNewPiece(peerBitfield: BitField) -> Int? {
 		var candidates: [Int] = []
 		for index in 0..<pieceCount
-			where !have[index] && partials[index] == nil && priorities[index] != .skip && peerBitfield[index] {
+			where !have[index] && partials[index] == nil && priorities[index] != .skip
+				&& peerBitfield[index] && !reservedForWebSeeds.contains(index) {
 			candidates.append(index)
 		}
 		guard !candidates.isEmpty else { return nil }
@@ -275,6 +279,37 @@ public final class PiecePicker {
 		}
 	}
 
+	// MARK: - Web seed reservations
+
+	/// Claims a piece for a web seed, or returns nil when there is nothing
+	/// useful left to claim.
+	///
+	/// Rarest first, as everywhere else, but it matters more here: a web seed
+	/// always has every piece, so spending it on what the swarm is short of is
+	/// the whole point. Pieces already under way with peers are left alone.
+	public func reservePieceForWebSeed() -> Int? {
+		var best: Int?
+		var bestAvailability = Int.max
+		for index in 0..<pieceCount
+			where !have[index] && partials[index] == nil && priorities[index] != .skip
+				&& !reservedForWebSeeds.contains(index) {
+			if availability[index] < bestAvailability {
+				best = index
+				bestAvailability = availability[index]
+			}
+		}
+		if let best { reservedForWebSeeds.insert(best) }
+		return best
+	}
+
+	public func releaseWebSeedReservation(_ index: Int) {
+		reservedForWebSeeds.remove(index)
+	}
+
+	public func isReservedForWebSeed(_ index: Int) -> Bool {
+		reservedForWebSeeds.contains(index)
+	}
+
 	// MARK: - Receiving
 
 	public func receive(pieceIndex: Int, begin: Int, block: Data, from peer: ObjectIdentifier? = nil) -> BlockOutcome {
@@ -308,6 +343,7 @@ public final class PiecePicker {
 	/// Called after the SHA-1 check passes and the piece is on disk.
 	public func markVerified(piece index: Int) {
 		partials[index] = nil
+		reservedForWebSeeds.remove(index)
 		guard !have[index] else { return }
 		have[index] = true
 		let size = Int64(size(ofPiece: index))
@@ -369,6 +405,7 @@ public final class PiecePicker {
 		have = bitfield
 		partials.removeAll()
 		inFlight.removeAll()
+		reservedForWebSeeds.removeAll()
 		recomputeTotals()
 	}
 

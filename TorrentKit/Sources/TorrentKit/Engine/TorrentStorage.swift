@@ -62,12 +62,13 @@ public actor TorrentStorage {
 		let range = metainfo.byteRange(ofPiece: index)
 		guard data.count == Int(range.upperBound - range.lowerBound) else { throw StorageError.outOfBounds }
 
-		for (file, fileRange, dataRange) in segments(for: range) {
+		for segment in segments(for: range) {
+			let file = segment.file
 			guard !file.isPadding, !skippedFileIndices.contains(file.index) else { continue }
 			let handle = try handle(for: file)
 			do {
-				try handle.seek(toOffset: UInt64(fileRange.lowerBound))
-				try handle.write(contentsOf: data.subdata(in: dataRange))
+				try handle.seek(toOffset: UInt64(segment.insideFile.lowerBound))
+				try handle.write(contentsOf: data.subdata(in: segment.insideBuffer))
 			} catch {
 				throw StorageError.writeFailed(url(for: file).path)
 			}
@@ -81,14 +82,17 @@ public actor TorrentStorage {
 		guard range.upperBound <= metainfo.totalLength else { throw StorageError.outOfBounds }
 
 		var output = Data(count: request.length)
-		for (file, fileRange, dataRange) in segments(for: range) {
+		for segment in segments(for: range) {
+			let file = segment.file
 			guard !file.isPadding else { continue }
 			let handle = try handle(for: file)
 			do {
-				try handle.seek(toOffset: UInt64(fileRange.lowerBound))
-				let chunk = try handle.read(upToCount: dataRange.count) ?? Data()
-				guard chunk.count == dataRange.count else { throw StorageError.readFailed(url(for: file).path) }
-				output.replaceSubrange(dataRange, with: chunk)
+				try handle.seek(toOffset: UInt64(segment.insideFile.lowerBound))
+				let chunk = try handle.read(upToCount: segment.insideBuffer.count) ?? Data()
+				guard chunk.count == segment.insideBuffer.count else {
+					throw StorageError.readFailed(url(for: file).path)
+				}
+				output.replaceSubrange(segment.insideBuffer, with: chunk)
 			} catch {
 				throw StorageError.readFailed(url(for: file).path)
 			}
@@ -134,21 +138,8 @@ public actor TorrentStorage {
 
 	// MARK: - File mapping
 
-	/// Splits a global byte range into per-file segments: the file, the byte
-	/// range inside that file, and the matching slice of the caller's buffer.
-	private func segments(for range: Range<Int64>) -> [(TorrentFile, Range<Int64>, Range<Int>)] {
-		var result: [(TorrentFile, Range<Int64>, Range<Int>)] = []
-		for file in metainfo.files where file.length > 0 {
-			let fileRange = file.range
-			let overlapStart = max(range.lowerBound, fileRange.lowerBound)
-			let overlapEnd = min(range.upperBound, fileRange.upperBound)
-			guard overlapStart < overlapEnd else { continue }
-
-			let insideFile = (overlapStart - fileRange.lowerBound)..<(overlapEnd - fileRange.lowerBound)
-			let insideBuffer = Int(overlapStart - range.lowerBound)..<Int(overlapEnd - range.lowerBound)
-			result.append((file, insideFile, insideBuffer))
-		}
-		return result
+	private func segments(for range: Range<Int64>) -> [TorrentMetainfo.Segment] {
+		metainfo.segments(forByteRange: range)
 	}
 
 	private func handle(for file: TorrentFile) throws -> FileHandle {

@@ -26,10 +26,11 @@ struct SettingsView: View {
 					}
 					Toggle("Distributed hash table", isOn: $draft.isDHTEnabled)
 					Toggle("Peer exchange", isOn: $draft.isPeerExchangeEnabled)
+					Toggle("Web seeds", isOn: $draft.areWebSeedsEnabled)
 				} header: {
 					Text("Network")
 				} footer: {
-					Text("DHT and peer exchange find peers without a tracker. Both are ignored for private torrents, which forbid them.")
+					Text("DHT and peer exchange find peers without a tracker; both are ignored for private torrents, which forbid them. Web seeds download from an ordinary HTTP server listed in the torrent, so a torrent whose swarm has gone quiet still finishes.")
 				}
 
 				Section {
@@ -92,7 +93,7 @@ struct SettingsView: View {
 				Section("About") {
 					LabeledValue("Client", "iTorrent 1.0")
 					LabeledValue("Peer ID prefix", PeerID.clientPrefix, isMonospaced: true)
-					LabeledValue("Protocols", "BEP 3, 5, 9, 10, 11, 12, 15, 23")
+					LabeledValue("Protocols", "BEP 3, 5, 9, 10, 11, 12, 15, 19, 23, 47")
 				}
 			}
 			.navigationTitle("Settings")
