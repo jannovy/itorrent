@@ -189,10 +189,17 @@ for device in payload.get("result", {}).get("devices", []):
 
     pairing = connection.get("pairingState") or "unknown"
     developer_mode = properties.get("developerModeStatus") or "unknown"
+    # A device Xcode has seen before stays in this list after it is unplugged,
+    # still reported as paired. Only the tunnel says whether it is reachable
+    # right now. Unknown values are let through: blocking on a state we have
+    # not seen would be worse than the install failing with its own message.
+    tunnel = connection.get("tunnelState") or "unknown"
 
     # First unmet requirement wins, in the order the user has to fix them.
     if pairing != "paired":
         status = "unpaired"
+    elif tunnel in ("unavailable", "disconnected"):
+        status = "offline"
     elif major < minimum:
         status = "oldos"
     elif developer_mode != "enabled":
@@ -217,6 +224,11 @@ explain_device_status() {
 			printf '%s\n' \
 				"Unlock it, then tap 'Trust This Computer' on the device." \
 				"If no prompt appeared, unplug and replug the cable." ;;
+		offline)
+			printf '%s\n' \
+				"Paired, but not connected right now." \
+				"Plug it in, unlock it, and leave it unlocked." \
+				"If it is already plugged in, unplug and replug the cable." ;;
 		oldos)
 			printf '%s\n' "iTorrent needs iOS $MINIMUM_IOS or later." ;;
 		devmode)
