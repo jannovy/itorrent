@@ -32,6 +32,10 @@ public final class PiecePicker {
 		var receivedBlocks: BitField
 		var requestedBlocks: Set<Int> = []
 		var lastProgress = Date()
+		/// Who supplied each block. A piece that fails its hash check was
+		/// corrupted by one of these peers, and with a single contributor there
+		/// is no doubt at all about which one.
+		var blockContributors: [Int: ObjectIdentifier] = [:]
 
 		var isComplete: Bool { receivedBlocks.isComplete }
 	}
@@ -273,7 +277,7 @@ public final class PiecePicker {
 
 	// MARK: - Receiving
 
-	public func receive(pieceIndex: Int, begin: Int, block: Data) -> BlockOutcome {
+	public func receive(pieceIndex: Int, begin: Int, block: Data, from peer: ObjectIdentifier? = nil) -> BlockOutcome {
 		guard pieceIndex >= 0, pieceIndex < pieceCount, !have[pieceIndex] else { return .ignored }
 		guard begin >= 0, begin % BlockRequest.standardLength == 0 else { return .ignored }
 
@@ -294,6 +298,7 @@ public final class PiecePicker {
 		piece.receivedBlocks[blockIndex] = true
 		piece.requestedBlocks.remove(blockIndex)
 		piece.lastProgress = Date()
+		if let peer { piece.blockContributors[blockIndex] = peer }
 		partials[pieceIndex] = piece
 
 		guard piece.isComplete else { return .accepted }
@@ -312,6 +317,13 @@ public final class PiecePicker {
 		for request in inFlight.keys where request.pieceIndex == index {
 			inFlight[request] = nil
 		}
+	}
+
+	/// Every peer that supplied a block of a piece. Read before `markCorrupt`,
+	/// which throws the partial away along with its record of who sent what.
+	public func contributors(toPiece index: Int) -> Set<ObjectIdentifier> {
+		guard let piece = partials[index] else { return [] }
+		return Set(piece.blockContributors.values)
 	}
 
 	/// Called when the SHA-1 check fails; the piece is thrown away and refetched.

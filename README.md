@@ -95,9 +95,9 @@ xcrun devicectl device install app --device <udid> build/Build/Products/Debug-ip
 
 Also: rarest-first piece selection with a random warm-up, endgame mode,
 tit-for-tat choking with a rotating optimistic slot, per-file priorities and
-skipping, SHA-1 verification of every piece, sparse file allocation, resume
-data, seeding, speed limits, and inbound connections so the client is
-reachable rather than connect-only.
+skipping, SHA-1 verification of every piece, banning peers that send pieces
+failing it, sparse file allocation, resume data, seeding, speed limits, and
+inbound connections so the client is reachable rather than connect-only.
 
 Not implemented: BitTorrent v2 (`urn:btmh:`), µTP, protocol encryption,
 WebTorrent/WSS trackers, web seeds, local peer discovery, and sequential
@@ -157,11 +157,12 @@ a connection per remote endpoint, which would mean thousands of objects.
 
 ## Tests
 
-`swift test` runs 56 tests. The ones that matter are in `TransferTests`: they
+`swift test` runs 71 tests. The ones that matter are in `TransferTests`: they
 stand up two real sessions on real sockets and move a real torrent between
 them over loopback — single-file, multi-file with pieces straddling file
 boundaries, a magnet link resolving its metadata over `ut_metadata`, and a
-resume from persisted state.
+resume from persisted state. `PeerBanTests` adds a peer that answers every
+request with zeroes, which must be banned and disconnected.
 
 There is also a live smoke test against the public network, off by default
 because it depends on strangers' upload slots:

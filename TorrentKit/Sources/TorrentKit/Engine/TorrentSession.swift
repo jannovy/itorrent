@@ -279,6 +279,11 @@ public actor TorrentSession: TorrentEnvironment {
 		for infoHash in order { await resume(infoHash: infoHash) }
 	}
 
+	/// Hosts banned for sending corrupt data, per torrent.
+	func bannedHosts(for infoHash: InfoHash) async -> Set<String> {
+		await tasks[infoHash]?.bannedHosts ?? []
+	}
+
 	public func recheck(infoHash: InfoHash) async {
 		await tasks[infoHash]?.recheck()
 		await publishSnapshots()

@@ -36,6 +36,11 @@ public actor TorrentTask {
 		/// Give up on a piece that keeps failing its hash check; something in
 		/// the swarm is poisoned and refetching forever burns bandwidth.
 		static let maximumHashFailures = 5
+		/// How many corrupt pieces a peer may be *implicated* in before it is
+		/// banned. A peer caught on its own is banned at once instead; this
+		/// counter only exists for pieces assembled from several peers, where
+		/// any one of them could be the liar.
+		static let maximumPeerHashFailures = 3
 	}
 
 	// MARK: - Identity
@@ -62,6 +67,12 @@ public actor TorrentTask {
 	private var candidatePeers: [PeerAddress] = []
 	private var attemptedPeers: Set<PeerAddress> = []
 	private var connectingCount = 0
+
+	/// Peers implicated in corrupt pieces. Banned by host rather than by
+	/// address: a peer that reconnects arrives from a fresh source port, so
+	/// banning the full address would ban nothing at all.
+	private(set) var bannedHosts: Set<String> = []
+	private var hashFailuresByHost: [String: Int] = [:]
 
 	private var status: TorrentStatus = .queued
 	private var errorMessage: String?
@@ -408,6 +419,7 @@ public actor TorrentTask {
 
 	public func addCandidates(_ addresses: [PeerAddress]) {
 		for address in addresses where address.isRoutable {
+			guard !bannedHosts.contains(address.host) else { continue }
 			guard peers[address] == nil, !attemptedPeers.contains(address) else { continue }
 			guard !candidatePeers.contains(address) else { continue }
 			candidatePeers.append(address)
@@ -464,7 +476,11 @@ public actor TorrentTask {
 		channel: PeerEventChannel
 	) async {
 		let settings = await environment.currentSettings()
-		guard peers.count < settings.maximumPeersPerTorrent, peers[address] == nil, !status.isPaused else {
+		guard peers.count < settings.maximumPeersPerTorrent,
+		      peers[address] == nil,
+		      !bannedHosts.contains(address.host),
+		      !status.isPaused
+		else {
 			connection.close(reason: .localChoice)
 			return
 		}
@@ -651,7 +667,7 @@ public actor TorrentTask {
 		guard let picker, let storage, let metainfo else { return }
 		session.downloadedBytes += Int64(block.count)
 
-		switch picker.receive(pieceIndex: pieceIndex, begin: begin, block: block) {
+		switch picker.receive(pieceIndex: pieceIndex, begin: begin, block: block, from: session.key) {
 		case .ignored, .accepted:
 			break
 
@@ -660,10 +676,12 @@ public actor TorrentTask {
 			let actual = Data(Insecure.SHA1.hash(data: data))
 			guard actual == expected else {
 				Log.torrent.warning("Piece \(index) failed its hash check")
+				let culprits = picker.contributors(toPiece: index)
 				picker.markCorrupt(piece: index)
 				if picker.failureCount(piece: index) >= Constants.maximumHashFailures {
 					errorMessage = "Piece \(index) failed its hash check repeatedly."
 				}
+				await banPeers(implicatedIn: culprits)
 				return
 			}
 			do {
@@ -691,6 +709,43 @@ public actor TorrentTask {
 		}
 
 		await requestBlocks(from: session)
+	}
+
+	// MARK: - Banning
+
+	/// Attributes a corrupt piece to the peers that built it.
+	///
+	/// A piece assembled from exactly one peer is proof: that peer sent bytes
+	/// that do not hash to what the torrent says they must, so it goes at once.
+	/// When several peers contributed, each is only suspected, and a peer has
+	/// to turn up in a few such pieces before it is banned — otherwise one
+	/// poisoner would take honest peers down with it.
+	private func banPeers(implicatedIn culprits: Set<ObjectIdentifier>) async {
+		let addresses = peers.values.filter { culprits.contains($0.key) }.map(\.address)
+		guard !addresses.isEmpty else { return }
+
+		for address in addresses {
+			if addresses.count == 1 {
+				ban(host: address.host, reason: "sent a piece that failed its hash check")
+				continue
+			}
+			let failures = hashFailuresByHost[address.host, default: 0] + 1
+			hashFailuresByHost[address.host] = failures
+			if failures >= Constants.maximumPeerHashFailures {
+				ban(host: address.host, reason: "implicated in \(failures) corrupt pieces")
+			}
+		}
+	}
+
+	private func ban(host: String, reason: String) {
+		guard bannedHosts.insert(host).inserted else { return }
+		Log.peer.warning("Banned \(host, privacy: .public): \(reason, privacy: .public)")
+
+		hashFailuresByHost[host] = nil
+		candidatePeers.removeAll { $0.host == host }
+		for address in peers.keys where address.host == host {
+			disconnect(address: address, reason: .protocolViolation("Banned: \(reason)"))
+		}
 	}
 
 	// MARK: - Uploading
