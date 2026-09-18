@@ -4,6 +4,21 @@ A BitTorrent client for iOS, written from scratch in Swift. No libtorrent, no
 C++, no third-party dependencies — the protocol stack is Swift and
 Network.framework all the way down.
 
+<p align="center">
+  <img src="docs/torrent-list.png" alt="Torrent list downloading a Debian image at 6.2 MB/s" width="200">
+  <img src="docs/torrent-overview.png" alt="Per-torrent transfer and content statistics" width="200">
+  <img src="docs/peers.png" alt="Connected peers with client names and per-peer rates" width="200">
+</p>
+<p align="center">
+  <img src="docs/trackers.png" alt="Tracker status and next announce time" width="200">
+  <img src="docs/settings.png" alt="Network, speed limit and connection settings" width="200">
+</p>
+
+<p align="center">
+  <em>Real device, real swarm: 792 MB of a Debian image pulled from qBittorrent
+  and Transmission peers at 6.9 MB/s.</em>
+</p>
+
 ```
 torrenttracker/
 ├── TorrentKit/        Swift package: the engine (platform-agnostic, tested on macOS)

@@ -104,6 +104,10 @@ struct SessionStatusBar: View {
 					.font(.caption2)
 					.foregroundStyle(.tertiary)
 					.monospacedDigit()
+					// On a narrow screen this otherwise breaks mid-number, so
+					// the bar reads "port 590 / 94" across two lines.
+					.lineLimit(1)
+					.fixedSize(horizontal: true, vertical: false)
 			}
 		}
 		.padding(.horizontal)
