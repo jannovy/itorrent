@@ -25,6 +25,17 @@ torrenttracker/
 └── iTorrent/          SwiftUI iOS app
 ```
 
+## Download
+
+[**iTorrent 1.0 (.ipa, 2.0 MB)**](dist/iTorrent-1.0-unsigned.ipa) — `sha256
+e04e7acf6c5f73ca4837c5913a7f21c9fbb89671250fa31df8722c65a8ef0e97`
+
+The build is **unsigned** on purpose. A signed development build would only
+install on the few devices in my provisioning profile, and the profile embedded
+in it would publish their UDIDs. Sign it with your own Apple ID using AltStore,
+SideStore or Sideloadly. A free Apple ID lasts seven days per signature; a paid
+developer account lasts a year. Requires iOS 17 or later.
+
 ## Running it
 
 ```bash

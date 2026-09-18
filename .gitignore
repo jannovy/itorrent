@@ -16,9 +16,9 @@ Downloads/
 *.torrent
 !Tests/**/*.torrent
 
-# Build artefacts for a release; published to GitHub, not committed
-dist/
-*.ipa
+# Release binaries live in dist/ on purpose; everything else built there does not
+dist/*
+!dist/*.ipa
 
 # macOS
 .DS_Store
