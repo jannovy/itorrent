@@ -9,6 +9,9 @@ public protocol TorrentEnvironment: AnyObject, Sendable {
 	func discoverPeersViaDHT(infoHash: InfoHash) async -> [PeerAddress]
 	func downloadLimiter() async -> RateLimiter
 	func uploadLimiter() async -> RateLimiter
+	/// A µTP transport to this peer, or nil when µTP is switched off or its
+	/// socket never came up.
+	func utpTransport(to address: PeerAddress) async -> PeerTransport?
 	func torrentDidChange(infoHash: InfoHash) async
 	func persist(state: TorrentPersistentState) async
 	/// Called once a magnet link has resolved, so the metadata survives a restart.
@@ -82,6 +85,9 @@ public actor TorrentTask {
 	/// Plenty of peers — and most private trackers' seedboxes — speak only one
 	/// of the two, so giving up after the first attempt would lose them.
 	private var plaintextRetries: Set<PeerAddress> = []
+	/// Peers whose µTP connection never got as far as a handshake, to be
+	/// redialled over TCP.
+	private var tcpRetries: Set<PeerAddress> = []
 
 	private var status: TorrentStatus = .queued
 	private var errorMessage: String?
@@ -561,7 +567,7 @@ public actor TorrentTask {
 			let address = candidatePeers.removeFirst()
 			guard peers[address] == nil, !attemptedPeers.contains(address) else { continue }
 			attemptedPeers.insert(address)
-			connect(to: address, encryption: encryptionPolicy(for: address, settings: settings))
+			await connect(to: address, settings: settings)
 		}
 	}
 
@@ -572,19 +578,46 @@ public actor TorrentTask {
 		return plaintextRetries.contains(address) ? .disabled : .preferred
 	}
 
-	private func connect(to address: PeerAddress, encryption: EncryptionPolicy) {
-		let connection = PeerConnection(
-			address: address,
-			role: .outgoing(infoHash: infoHash),
-			localPeerID: environment.peerID,
-			encryption: encryption
-		)
+	private func connect(to address: PeerAddress, settings: SessionSettings) async {
+		let encryption = encryptionPolicy(for: address, settings: settings)
+
+		// µTP first, TCP second. µTP reaches peers TCP cannot and is far kinder
+		// to the connection it shares, but plenty of peers do not speak it, so
+		// a failure before the handshake is redialled over TCP rather than
+		// costing us the peer.
+		var transport: PeerTransport?
+		var kind = PeerSession.TransportKind.tcp
+		if settings.isUTPEnabled, !tcpRetries.contains(address) {
+			transport = await environment.utpTransport(to: address)
+			if transport != nil { kind = .utp }
+		}
+
+		let connection: PeerConnection
+		if let transport {
+			connection = PeerConnection(
+				transport: transport,
+				address: address,
+				role: .outgoing(infoHash: infoHash),
+				localPeerID: environment.peerID,
+				encryption: encryption,
+				queueLabel: "itorrent.peer.utp.\(address.description)"
+			)
+		} else {
+			connection = PeerConnection(
+				address: address,
+				role: .outgoing(infoHash: infoHash),
+				localPeerID: environment.peerID,
+				encryption: encryption
+			)
+		}
+
 		let session = PeerSession(
 			connection: connection,
 			address: address,
 			isIncoming: false,
 			pieceCount: metainfo?.pieceCount ?? 0
 		)
+		session.transportKind = kind
 		peers[address] = session
 		connectingCount += 1
 		consumeEvents(of: session, channel: PeerEventChannel(connection.start()))
@@ -595,7 +628,8 @@ public actor TorrentTask {
 		incoming connection: PeerConnection,
 		address: PeerAddress,
 		handshake: PeerHandshake,
-		channel: PeerEventChannel
+		channel: PeerEventChannel,
+		usesUTP: Bool = false
 	) async {
 		let settings = await environment.currentSettings()
 		guard peers.count < settings.maximumPeersPerTorrent,
@@ -612,6 +646,7 @@ public actor TorrentTask {
 			isIncoming: true,
 			pieceCount: metainfo?.pieceCount ?? 0
 		)
+		session.transportKind = usesUTP ? .utp : .tcp
 		peers[address] = session
 		consumeEvents(of: session, channel: channel)
 		connection.acceptIncomingHandshake(infoHash: infoHash)
@@ -1079,6 +1114,16 @@ public actor TorrentTask {
 		// address is taken off the attempted list so the next tick redials it.
 		if reason.allowsPlaintextRetry, !session.isIncoming, !plaintextRetries.contains(address) {
 			plaintextRetries.insert(address)
+			retry(address)
+		}
+
+		// A µTP connection that died before the handshake means the peer is
+		// not listening on UDP — which is common — so it gets one TCP attempt.
+		if session.transportKind == .utp,
+		   session.remotePeerID == nil,
+		   !session.isIncoming,
+		   !tcpRetries.contains(address) {
+			tcpRetries.insert(address)
 			retry(address)
 		}
 		sessionDownloadedBytes += session.downloadedBytes

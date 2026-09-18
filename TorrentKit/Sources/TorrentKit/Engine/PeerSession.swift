@@ -2,10 +2,16 @@ import Foundation
 
 /// Per-peer state, owned exclusively by the `TorrentTask` actor that created it.
 final class PeerSession {
+	enum TransportKind {
+		case tcp
+		case utp
+	}
+
 	let connection: PeerConnection
 	let address: PeerAddress
 	let isIncoming: Bool
 	let connectedAt = Date()
+	var transportKind: TransportKind = .tcp
 
 	var remotePeerID: Data?
 	var bitfield: BitField
@@ -72,7 +78,8 @@ final class PeerSession {
 			weAreChoking: weAreChoking,
 			weAreInterested: weAreInterested,
 			isIncoming: isIncoming,
-			supportsExtensions: supportsExtensions
+			supportsExtensions: supportsExtensions,
+			usesUTP: transportKind == .utp
 		)
 	}
 }

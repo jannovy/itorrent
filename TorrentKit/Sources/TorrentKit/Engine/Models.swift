@@ -50,6 +50,7 @@ public struct PeerSnapshot: Sendable, Identifiable, Hashable {
 	public let weAreInterested: Bool
 	public let isIncoming: Bool
 	public let supportsExtensions: Bool
+	public let usesUTP: Bool
 
 	public var id: String { address.description }
 
@@ -60,6 +61,8 @@ public struct PeerSnapshot: Sendable, Identifiable, Hashable {
 		if !isChokingUs && weAreInterested { flags += "D" }
 		if !weAreChoking && isInterestedInUs { flags += "U" }
 		if supportsExtensions { flags += "E" }
+		// "P" for µTP, the same letter desktop clients use.
+		if usesUTP { flags += "P" }
 		return flags
 	}
 }
@@ -160,6 +163,10 @@ public struct SessionSettings: Sendable, Codable, Equatable {
 	/// BEP 19 web seeds. On by default: a torrent whose swarm has died still
 	/// downloads at full speed from the HTTP server that published it.
 	public var areWebSeedsEnabled: Bool
+	/// µTP (BEP 29). On by default: it reaches peers TCP cannot, and its
+	/// delay-based congestion control keeps a torrent from making everything
+	/// else on the same connection unusable.
+	public var isUTPEnabled: Bool
 	/// MSE/PE protocol encryption. Preferred by default, which is what every
 	/// desktop client ships: encrypted where the peer can, plaintext where it
 	/// cannot, so no peer is lost to the setting.
@@ -187,6 +194,7 @@ public struct SessionSettings: Sendable, Codable, Equatable {
 		isPeerExchangeEnabled: true,
 		isLocalDiscoveryEnabled: false,
 		areWebSeedsEnabled: true,
+		isUTPEnabled: true,
 		encryptionPolicy: .preferred,
 		maximumPeersPerTorrent: 50,
 		maximumGlobalPeers: 200,
@@ -204,6 +212,7 @@ public struct SessionSettings: Sendable, Codable, Equatable {
 		isPeerExchangeEnabled: Bool,
 		isLocalDiscoveryEnabled: Bool,
 		areWebSeedsEnabled: Bool,
+		isUTPEnabled: Bool,
 		encryptionPolicy: EncryptionPolicy,
 		maximumPeersPerTorrent: Int,
 		maximumGlobalPeers: Int,
@@ -219,6 +228,7 @@ public struct SessionSettings: Sendable, Codable, Equatable {
 		self.isPeerExchangeEnabled = isPeerExchangeEnabled
 		self.isLocalDiscoveryEnabled = isLocalDiscoveryEnabled
 		self.areWebSeedsEnabled = areWebSeedsEnabled
+		self.isUTPEnabled = isUTPEnabled
 		self.encryptionPolicy = encryptionPolicy
 		self.maximumPeersPerTorrent = maximumPeersPerTorrent
 		self.maximumGlobalPeers = maximumGlobalPeers
@@ -253,6 +263,7 @@ public struct SessionSettings: Sendable, Codable, Equatable {
 		isPeerExchangeEnabled = value(.isPeerExchangeEnabled, fallback.isPeerExchangeEnabled)
 		isLocalDiscoveryEnabled = value(.isLocalDiscoveryEnabled, fallback.isLocalDiscoveryEnabled)
 		areWebSeedsEnabled = value(.areWebSeedsEnabled, fallback.areWebSeedsEnabled)
+		isUTPEnabled = value(.isUTPEnabled, fallback.isUTPEnabled)
 		encryptionPolicy = value(.encryptionPolicy, fallback.encryptionPolicy)
 		maximumPeersPerTorrent = value(.maximumPeersPerTorrent, fallback.maximumPeersPerTorrent)
 		maximumGlobalPeers = value(.maximumGlobalPeers, fallback.maximumGlobalPeers)

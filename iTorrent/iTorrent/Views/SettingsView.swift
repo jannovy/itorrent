@@ -34,6 +34,7 @@ struct SettingsView: View {
 				}
 
 				Section {
+					Toggle("µTP", isOn: $draft.isUTPEnabled)
 					Picker("Encryption", selection: $draft.encryptionPolicy) {
 						ForEach(EncryptionPolicy.allCases, id: \.self) { policy in
 							Text(policy.label).tag(policy)
@@ -42,7 +43,7 @@ struct SettingsView: View {
 				} header: {
 					Text("Transport")
 				} footer: {
-					Text("Encryption hides the protocol from equipment that throttles BitTorrent, and is needed for peers that accept nothing else. \"Prefer\" falls back to plaintext rather than losing a peer.")
+					Text("µTP carries BitTorrent over UDP and backs off when it notices it is adding delay, so a download does not make the rest of the connection unusable. Peers that cannot do it are redialled over TCP.\n\nEncryption hides the protocol from equipment that throttles BitTorrent, and is needed for peers that accept nothing else. \"Prefer\" falls back to plaintext rather than losing a peer.")
 				}
 
 				Section {
@@ -105,7 +106,7 @@ struct SettingsView: View {
 				Section("About") {
 					LabeledValue("Client", "iTorrent 1.0")
 					LabeledValue("Peer ID prefix", PeerID.clientPrefix, isMonospaced: true)
-					LabeledValue("Protocols", "BEP 3, 5, 9, 10, 11, 12, 15, 19, 23, 47")
+					LabeledValue("Protocols", "BEP 3, 5, 9, 10, 11, 12, 15, 19, 23, 29, 47")
 					LabeledValue("Encryption", "MSE/PE (RC4)")
 				}
 			}

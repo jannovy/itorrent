@@ -2,7 +2,7 @@
 
 A BitTorrent client for iOS, written from scratch in Swift. No libtorrent, no
 C++, no third-party dependencies — the protocol stack is Swift and
-Network.framework all the way down, protocol encryption and the 768-bit
+Network.framework all the way down, µTP, protocol encryption and the 768-bit
 Diffie-Hellman behind it included.
 
 <p align="center">
@@ -93,6 +93,7 @@ xcrun devicectl device install app --device <udid> build/Build/Products/Debug-ip
 | 15 | UDP trackers | `Tracker/UDPTracker.swift` |
 | 19 | Web seeds (HTTP `Range` requests) | `WebSeed/` |
 | 23 | Compact peer lists | `Wire/PeerAddress.swift` |
+| 29 | µTP, with LEDBAT congestion control | `UTP/` |
 | 47 | Padding files | `Model/Metainfo.swift` |
 | — | MSE/PE protocol encryption | `Wire/MSE.swift`, `Core/BigUInt.swift` |
 
@@ -102,7 +103,7 @@ skipping, SHA-1 verification of every piece, banning peers that send pieces
 failing it, sparse file allocation, resume data, seeding, speed limits, and
 inbound connections so the client is reachable rather than connect-only.
 
-Not implemented: BitTorrent v2 (`urn:btmh:`), µTP, the fast extension (BEP 6),
+Not implemented: BitTorrent v2 (`urn:btmh:`), the fast extension (BEP 6),
 UPnP/NAT-PMP port mapping, WebTorrent/WSS trackers, local peer discovery, and
 sequential download.
 
@@ -154,12 +155,18 @@ port nobody could dial, and every connection had to be one we opened ourselves.
 The session waits for the port, and pushes it into every torrent (with a
 re-announce) whenever it changes.
 
-**Encryption is a layer, not a fork of the client.** `PeerConnection` frames
-the BitTorrent protocol and knows nothing about MSE: the handshake sits
-between the socket and the framing and leaves behind a pair of RC4 ciphers. It
-negotiates, and it falls back — a peer whose encrypted handshake fails is
-redialled in the clear, because a peer lost to a preference is worse than a
-peer reached on worse terms.
+**The DHT uses a BSD socket, not `NWConnection`.** The DHT talks to thousands
+of short-lived addresses from one local port; Network.framework models UDP as
+a connection per remote endpoint, which would mean thousands of objects. µTP
+shares the same reasoning and the same kind of socket.
+
+**Encryption and µTP are layers, not forks of the client.** `PeerConnection`
+frames the BitTorrent protocol and knows nothing about either: it talks to a
+`PeerTransport` (TCP or µTP), and MSE sits between the socket and the framing
+as a pair of RC4 ciphers. Both negotiate, and both fall back — a peer whose
+encrypted handshake fails is redialled in the clear, a peer that never answers
+a µTP SYN is redialled over TCP — because a peer lost to a preference is worse
+than a peer reached on worse terms.
 
 **The BitTorrent handshake rides inside the encrypted one.** MSE lets the
 initiator attach a payload to its half of the exchange, so the handshake goes
@@ -176,31 +183,36 @@ hold — which is why the session keeps a lock-protected mirror of that set: the
 match happens on the connection's own queue, mid-handshake, where awaiting the
 session actor would deadlock the framing.
 
-**Web seeds needed something that already existed.** Mapping a piece onto the
-files it spans was inside `TorrentStorage`; a web seed needs the same mapping
-to turn a piece into HTTP range requests, so it moved to `TorrentMetainfo`
-rather than being written twice. A piece a web seed has claimed is reserved in
-the `PiecePicker`, so peers do not fetch it in parallel.
-
-**The DHT uses a BSD socket, not `NWConnection`.** The DHT talks to thousands
-of short-lived addresses from one local port; Network.framework models UDP as
-a connection per remote endpoint, which would mean thousands of objects.
+**Web seeds and µTP both needed something that already existed.** Mapping a
+piece onto the files it spans was inside `TorrentStorage`; a web seed needs the
+same mapping to turn a piece into HTTP range requests, so it moved to
+`TorrentMetainfo` rather than being written twice. A piece a web seed has
+claimed is reserved in the `PiecePicker`, so peers do not fetch it in parallel.
 
 ## Tests
 
-`swift test` runs 101 tests. The ones that matter are in `TransferTests`: they
-stand up two real sessions on real sockets and move a real torrent between
-them over loopback — single-file, multi-file with pieces straddling file
-boundaries, a magnet link resolving its metadata over `ut_metadata`, and a
-resume from persisted state. `PeerBanTests` adds a peer that answers every
-request with zeroes, which must be banned and disconnected. `WebSeedTests`
-stands up a real HTTP server that honours `Range` — including one that ignores
-it — and downloads a torrent with no peers whatsoever in full.
-`EncryptedTransferTests` repeats the whole transfer with MSE on, in every
-combination of off/prefer/require, including the fallback to plaintext and a
-peer that refuses a plaintext handshake outright, and `BigUIntTests` checks the
-modular arithmetic the key exchange runs on against vectors computed
-independently.
+`swift test` runs 121 tests. The ones that matter stand up two real sessions on
+real sockets and move a real torrent between them over loopback:
+
+- `TransferTests` — single-file, multi-file with pieces straddling file
+  boundaries, a magnet link resolving its metadata over `ut_metadata`, and a
+  resume from persisted state.
+- `EncryptedTransferTests` — the same transfer with MSE on, in every
+  combination of off/prefer/require, including the fallback to plaintext and a
+  peer that refuses a plaintext handshake outright.
+- `UTPTransferTests` — the same transfer over µTP, over µTP with MSE on top,
+  and the fallback to TCP when the far end has µTP switched off. Each asserts
+  which transport actually carried it, because a fallback test passes by
+  accident too easily.
+- `UTPTests` — a megabyte over loopback, and 300 KB through a network that
+  drops one data packet in eight, which is the only way to know retransmission
+  and the gap handling work at all.
+- `WebSeedTests` — a real HTTP server that honours `Range`, including a server
+  that ignores it, and a torrent with no peers whatsoever downloading in full.
+- `PeerBanTests` — a peer that answers every request with zeroes, which must be
+  banned and disconnected.
+- `BigUIntTests` — the modular arithmetic MSE's key exchange runs on, against
+  vectors computed independently.
 
 There is also a live smoke test against the public network, off by default
 because it depends on strangers' upload slots:
@@ -226,8 +238,8 @@ Categories: `session`, `torrent`, `peer`, `tracker`, `dht`, `storage`.
 - Torrent data is excluded from iCloud backups; Apple rejects apps that back up
   re-downloadable content.
 - ATS is disabled (`NSAllowsArbitraryLoads`) because most trackers and web
-  seeds are still plain HTTP and peer connections are raw TCP. Shipping this on the App Store
-  would need a justification — for sideloading it is fine.
+  seeds are still plain HTTP and peer connections are raw TCP or µTP. Shipping
+  this on the App Store would need a justification — for sideloading it is fine.
 - `magnet:` links and `.torrent` files open the app.
 - There is no background mode. iOS gives no legitimate background execution for
   this, so transfers stop when the app is suspended; state is flushed on the way

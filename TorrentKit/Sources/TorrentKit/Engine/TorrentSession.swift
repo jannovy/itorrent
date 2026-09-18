@@ -23,6 +23,9 @@ public actor TorrentSession: TorrentEnvironment {
 	private let store: SessionStore
 	private let dht: DHT
 	private let listener = PeerListener()
+	/// µTP shares the TCP listener's port number, so one announced address
+	/// works for both transports.
+	private let utp = UTPSocket()
 	private let downloadRateLimiter: RateLimiter
 	private let uploadRateLimiter: RateLimiter
 
@@ -81,6 +84,7 @@ public actor TorrentSession: TorrentEnvironment {
 			Log.session.info("Listening for peers on port \(port)")
 		}
 
+		startUTPIfEnabled(port: port)
 		await startDHTIfEnabled()
 		await restorePersistedTorrents()
 		startPublishing()
@@ -92,6 +96,8 @@ public actor TorrentSession: TorrentEnvironment {
 		publishTask?.cancel()
 		dhtMaintenanceTask?.cancel()
 		listener.stop()
+
+		utp.stop()
 
 		let exported = await dht.exportNodes()
 		if !exported.isEmpty { store.save(dhtNodes: exported) }
@@ -137,6 +143,27 @@ public actor TorrentSession: TorrentEnvironment {
 		}
 	}
 
+	private func startUTPIfEnabled(port: UInt16) {
+		guard settings.isUTPEnabled, port > 0 else { return }
+		do {
+			try utp.start(port: port)
+			Log.session.info("uTP listening on UDP port \(self.utp.localPort)")
+		} catch {
+			// Not fatal: TCP still works, and the alternative is refusing to
+			// start over a transport that is an optimisation.
+			Log.session.error("Could not start uTP: \(error.localizedDescription, privacy: .public)")
+			return
+		}
+
+		let socketQueue = utp.queue
+		utp.onIncomingConnection = { [weak self] connection in
+			guard let self else { return }
+			let transport = UTPTransport(connection: connection, socketQueue: socketQueue)
+			let address = connection.remote
+			Task { await self.accept(transport: transport, address: address, label: "utp", usesUTP: true) }
+		}
+	}
+
 	private func startDHTIfEnabled() async {
 		guard settings.isDHTEnabled else { return }
 		// Bind the DHT to its own UDP port; sharing the TCP port number is
@@ -174,13 +201,28 @@ public actor TorrentSession: TorrentEnvironment {
 	// MARK: - Inbound connections
 
 	private func accept(_ incoming: PeerListener.Incoming) async {
+		await accept(
+			transport: TCPTransport(accepted: incoming.connection),
+			address: incoming.address,
+			label: "tcp"
+		)
+	}
+
+	private func accept(
+		transport: PeerTransport,
+		address: PeerAddress,
+		label: String,
+		usesUTP: Bool = false
+	) async {
 		let registry = infoHashRegistry
 		let connection = PeerConnection(
-			incoming: incoming.connection,
-			address: incoming.address,
+			transport: transport,
+			address: address,
+			role: .incoming,
 			localPeerID: peerID,
 			encryption: settings.encryptionPolicy,
-			knownInfoHashes: { registry.all }
+			knownInfoHashes: { registry.all },
+			queueLabel: "itorrent.peer.in.\(label).\(address.description)"
 		)
 		let channel = PeerEventChannel(connection.start())
 
@@ -196,9 +238,10 @@ public actor TorrentSession: TorrentEnvironment {
 		}
 		await task.adopt(
 			incoming: connection,
-			address: incoming.address,
+			address: address,
 			handshake: handshake,
-			channel: channel
+			channel: channel,
+			usesUTP: usesUTP
 		)
 	}
 
@@ -490,6 +533,11 @@ public actor TorrentSession: TorrentEnvironment {
 	public func discoverPeersViaDHT(infoHash: InfoHash) async -> [PeerAddress] {
 		guard settings.isDHTEnabled, await dht.isRunning else { return [] }
 		return await dht.findPeers(infoHash: infoHash, announce: true)
+	}
+
+	public func utpTransport(to address: PeerAddress) async -> PeerTransport? {
+		guard settings.isUTPEnabled, utp.localPort > 0 else { return nil }
+		return UTPTransport(socket: utp, address: address)
 	}
 
 	public func downloadLimiter() async -> RateLimiter { downloadRateLimiter }

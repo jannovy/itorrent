@@ -74,7 +74,7 @@ public final class PeerConnection: @unchecked Sendable {
 	private let knownInfoHashes: @Sendable () -> [InfoHash]
 
 	private let queue: DispatchQueue
-	private let connection: NWConnection
+	private let transport: PeerTransport
 	private var buffer = Data()
 	private var didHandshake = false
 	private var didFinish = false
@@ -91,45 +91,41 @@ public final class PeerConnection: @unchecked Sendable {
 
 	private let counters = ByteCounters()
 
-	public init(
+	/// Dials a peer over TCP.
+	public convenience init(
 		address: PeerAddress,
 		role: Role,
 		localPeerID: PeerID,
 		encryption: EncryptionPolicy = .disabled
 	) {
+		self.init(
+			transport: TCPTransport(to: address),
+			address: address,
+			role: role,
+			localPeerID: localPeerID,
+			encryption: encryption,
+			queueLabel: "itorrent.peer.\(address.description)"
+		)
+	}
+
+	/// Wraps an already-built transport, which is how a µTP connection — or an
+	/// inbound TCP one the listener accepted — becomes a peer.
+	init(
+		transport: PeerTransport,
+		address: PeerAddress,
+		role: Role,
+		localPeerID: PeerID,
+		encryption: EncryptionPolicy,
+		knownInfoHashes: @escaping @Sendable () -> [InfoHash] = { [] },
+		queueLabel: String
+	) {
 		self.address = address
 		self.role = role
 		self.localPeerID = localPeerID
 		self.encryption = encryption
-		self.knownInfoHashes = { [] }
-		self.queue = DispatchQueue(label: "itorrent.peer.\(address.description)")
-
-		let parameters = NWParameters.tcp
-		parameters.prohibitExpensivePaths = false
-		if let tcp = parameters.defaultProtocolStack.internetProtocol as? NWProtocolTCP.Options {
-			tcp.noDelay = true
-			tcp.connectionTimeout = 10
-			tcp.enableKeepalive = true
-			tcp.keepaliveIdle = 60
-		}
-		self.connection = NWConnection(to: address.endpoint, using: parameters)
-	}
-
-	/// Wraps a connection handed over by `PeerListener`.
-	public init(
-		incoming connection: NWConnection,
-		address: PeerAddress,
-		localPeerID: PeerID,
-		encryption: EncryptionPolicy = .disabled,
-		knownInfoHashes: @escaping @Sendable () -> [InfoHash] = { [] }
-	) {
-		self.address = address
-		self.role = .incoming
-		self.localPeerID = localPeerID
-		self.encryption = encryption
 		self.knownInfoHashes = knownInfoHashes
-		self.queue = DispatchQueue(label: "itorrent.peer.in.\(address.description)")
-		self.connection = connection
+		self.queue = DispatchQueue(label: queueLabel)
+		self.transport = transport
 	}
 
 	public var bytesReceived: Int64 { counters.received }
@@ -148,11 +144,11 @@ public final class PeerConnection: @unchecked Sendable {
 				continuation.onTermination = { [weak self] _ in
 					self?.close(reason: .localChoice)
 				}
-				self.connection.stateUpdateHandler = { [weak self] state in
-					self?.queue.async { self?.handle(state: state) }
-				}
+				self.transport.onReady = { [weak self] in self?.handleReady() }
+				self.transport.onData = { [weak self] data in self?.handleIncoming(data) }
+				self.transport.onClosed = { [weak self] reason in self?.finish(reason: reason) }
 				self.armTimeout(after: Self.handshakeTimeout, reason: .timeout)
-				self.connection.start(queue: self.queue)
+				self.transport.start(on: self.queue)
 			}
 		}
 	}
@@ -194,77 +190,39 @@ public final class PeerConnection: @unchecked Sendable {
 	///   obfuscated by its own construction and must not go through the cipher.
 	private func transmit(_ data: Data, encrypted: Bool = true) {
 		let data = encrypted ? (encryptor?.process(data) ?? data) : data
-		connection.send(content: data, completion: .contentProcessed { [weak self] error in
-			guard let self else { return }
-			if let error {
-				self.queue.async { self.finish(reason: .network(error.localizedDescription)) }
-			} else {
-				self.counters.addSent(data.count)
-			}
-		})
+		counters.addSent(data.count)
+		transport.send(data)
 	}
 
 	// MARK: - Receiving
 
-	private func handle(state: NWConnection.State) {
-		switch state {
-		case .ready:
-			lastActivity = Date()
-			if case let .outgoing(infoHash) = role {
-				let handshake = PeerHandshake(infoHash: infoHash, peerID: localPeerID.raw).encoded()
-				if encryption == .disabled {
-					transmit(handshake)
-				} else {
-					// The BitTorrent handshake travels as MSE's initial payload
-					// rather than after it, which saves a round trip and leaves
-					// nothing recognisable in the opening bytes.
-					let engine = MSEHandshake(
-						role: .initiator(infoHash: infoHash, payload: handshake),
-						policy: encryption
-					)
-					handshakeEngine = engine
-					transmit(engine.begin(), encrypted: false)
-				}
-			}
-			receiveNext()
+	/// The transport is up: on an outgoing connection, open the conversation.
+	private func handleReady() {
+		guard !didFinish else { return }
+		lastActivity = Date()
+		guard case let .outgoing(infoHash) = role else { return }
 
-		case let .failed(error):
-			finish(reason: .network(error.localizedDescription))
-
-		case .cancelled:
-			finish(reason: .localChoice)
-
-		case let .waiting(error):
-			// `waiting` means the path is unusable; for a short-lived peer
-			// connection there is nothing to wait for.
-			finish(reason: .network(error.localizedDescription))
-
-		default:
-			break
+		let handshake = PeerHandshake(infoHash: infoHash, peerID: localPeerID.raw).encoded()
+		guard encryption != .disabled else {
+			transmit(handshake)
+			return
 		}
+		// The BitTorrent handshake travels as MSE's initial payload rather than
+		// after it, which saves a round trip and leaves nothing recognisable in
+		// the opening bytes.
+		let engine = MSEHandshake(
+			role: .initiator(infoHash: infoHash, payload: handshake),
+			policy: encryption
+		)
+		handshakeEngine = engine
+		transmit(engine.begin(), encrypted: false)
 	}
 
-	private func receiveNext() {
-		connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, isComplete, error in
-			guard let self else { return }
-			self.queue.async {
-				if let error {
-					self.finish(reason: .network(error.localizedDescription))
-					return
-				}
-				if let data, !data.isEmpty {
-					self.counters.addReceived(data.count)
-					self.lastActivity = Date()
-					self.ingest(data)
-				}
-				if isComplete {
-					self.finish(reason: .closedByPeer)
-					return
-				}
-				guard !self.didFinish else { return }
-				self.receiveNext()
-			}
-		}
+	private func handleIncoming(_ data: Data) {
+		guard !didFinish else { return }
+		counters.addReceived(data.count)
+		lastActivity = Date()
+		ingest(data)
 	}
 
 	/// Routes freshly arrived bytes: through the MSE handshake while one is in
@@ -433,8 +391,7 @@ public final class PeerConnection: @unchecked Sendable {
 		}
 		timeoutWorkItem?.cancel()
 		timeoutWorkItem = nil
-		connection.stateUpdateHandler = nil
-		connection.cancel()
+		transport.cancel()
 		continuation?.yield(.disconnected(reason))
 		continuation?.finish()
 		continuation = nil
