@@ -198,6 +198,26 @@ struct UTPTests {
 		#expect(pair.accepted.value?.isOpen == true)
 	}
 
+	@Test("A connect callback attached after the peer answered still fires")
+	func deliversAConnectThatAlreadyHappened() async throws {
+		let pair = try Pair()
+		defer { pair.stop() }
+
+		let connection = pair.dial()
+		// Wait for the reply to have been processed before subscribing at all.
+		// A peer on loopback answers a SYN faster than a caller can attach its
+		// callbacks, and an event fired into a nil closure is an event lost.
+		try await waitUntil("the connection to open") {
+			pair.client.queue.sync { connection.isOpen }
+		}
+
+		let connected = Box(false)
+		pair.client.queue.sync { connection.onConnect = { connected.value = true } }
+
+		try await waitUntil("the late connect callback") { connected.value }
+		#expect(connected.value)
+	}
+
 	@Test("A megabyte arrives intact and in order")
 	func transfersData() async throws {
 		let pair = try Pair()

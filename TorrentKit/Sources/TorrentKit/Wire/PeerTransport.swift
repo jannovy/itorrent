@@ -167,9 +167,9 @@ final class UTPTransport: PeerTransport {
 			}
 			self.connection = connection
 
-			// An inbound connection is already open by the time we see it.
-			let wasOpen = connection.isOpen
-
+			// A connection holds on to anything that happened before this
+			// point — including an inbound one, which was open before this
+			// object existed — and hands it over as the callbacks are set.
 			connection.onConnect = { [weak self] in
 				guard let self else { return }
 				self.queue.async { self.onReady?() }
@@ -183,9 +183,6 @@ final class UTPTransport: PeerTransport {
 				self.queue.async {
 					self.close(reason: reason.map { .network($0) } ?? .closedByPeer)
 				}
-			}
-			if wasOpen {
-				self.queue.async { self.onReady?() }
 			}
 		}
 	}

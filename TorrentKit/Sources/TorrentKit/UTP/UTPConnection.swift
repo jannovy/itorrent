@@ -43,7 +43,9 @@ final class UTPConnection {
 	private(set) var state: State = .connecting
 
 	// Callbacks, all delivered on the socket's queue.
-	var onConnect: (() -> Void)?
+	var onConnect: (() -> Void)? {
+		didSet { flushPendingConnect() }
+	}
 
 	/// Bytes and the close notification can both arrive before whoever owns
 	/// this connection has had a chance to subscribe — an inbound peer's first
@@ -59,6 +61,7 @@ final class UTPConnection {
 
 	private var pendingDelivery = Data()
 	private var pendingClose: String??
+	private var pendingConnect = false
 	private let transmit: (UTPPacket, PeerAddress) -> Void
 
 	// Send side.
@@ -130,7 +133,7 @@ final class UTPConnection {
 		peerWindow = packet.windowSize
 		state = .connected
 		sendState()
-		onConnect?()
+		notifyConnected()
 	}
 
 	// MARK: - Writing
@@ -192,7 +195,7 @@ final class UTPConnection {
 				acknowledgementNumber = packet.sequenceNumber &- 1
 				state = .connected
 				processAcks(packet, now: now)
-				onConnect?()
+				notifyConnected()
 				flush()
 				return
 			}
@@ -409,6 +412,24 @@ final class UTPConnection {
 			return
 		}
 		onClose?(reason)
+	}
+
+	/// The peer can answer a SYN before the owner has subscribed — and an
+	/// inbound connection is open before the owner exists at all — so the event
+	/// waits rather than being fired into a nil callback, exactly as the bytes
+	/// behind it do.
+	private func notifyConnected() {
+		guard let onConnect else {
+			pendingConnect = true
+			return
+		}
+		onConnect()
+	}
+
+	private func flushPendingConnect() {
+		guard pendingConnect, let onConnect else { return }
+		pendingConnect = false
+		onConnect()
 	}
 
 	private func deliver(_ payload: Data) {
