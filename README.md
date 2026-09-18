@@ -2,7 +2,8 @@
 
 A BitTorrent client for iOS, written from scratch in Swift. No libtorrent, no
 C++, no third-party dependencies — the protocol stack is Swift and
-Network.framework all the way down.
+Network.framework all the way down, protocol encryption and the 768-bit
+Diffie-Hellman behind it included.
 
 <p align="center">
   <img src="docs/torrent-list.png" alt="Torrent list downloading a Debian image at 6.2 MB/s" width="200">
@@ -93,6 +94,7 @@ xcrun devicectl device install app --device <udid> build/Build/Products/Debug-ip
 | 19 | Web seeds (HTTP `Range` requests) | `WebSeed/` |
 | 23 | Compact peer lists | `Wire/PeerAddress.swift` |
 | 47 | Padding files | `Model/Metainfo.swift` |
+| — | MSE/PE protocol encryption | `Wire/MSE.swift`, `Core/BigUInt.swift` |
 
 Also: rarest-first piece selection with a random warm-up, endgame mode,
 tit-for-tat choking with a rotating optimistic slot, per-file priorities and
@@ -100,8 +102,9 @@ skipping, SHA-1 verification of every piece, banning peers that send pieces
 failing it, sparse file allocation, resume data, seeding, speed limits, and
 inbound connections so the client is reachable rather than connect-only.
 
-Not implemented: BitTorrent v2 (`urn:btmh:`), µTP, protocol encryption,
-WebTorrent/WSS trackers, local peer discovery, and sequential download.
+Not implemented: BitTorrent v2 (`urn:btmh:`), µTP, the fast extension (BEP 6),
+UPnP/NAT-PMP port mapping, WebTorrent/WSS trackers, local peer discovery, and
+sequential download.
 
 ## How it is put together
 
@@ -151,6 +154,28 @@ port nobody could dial, and every connection had to be one we opened ourselves.
 The session waits for the port, and pushes it into every torrent (with a
 re-announce) whenever it changes.
 
+**Encryption is a layer, not a fork of the client.** `PeerConnection` frames
+the BitTorrent protocol and knows nothing about MSE: the handshake sits
+between the socket and the framing and leaves behind a pair of RC4 ciphers. It
+negotiates, and it falls back — a peer whose encrypted handshake fails is
+redialled in the clear, because a peer lost to a preference is worse than a
+peer reached on worse terms.
+
+**The BitTorrent handshake rides inside the encrypted one.** MSE lets the
+initiator attach a payload to its half of the exchange, so the handshake goes
+out as that payload rather than after the handshake completes. That saves a
+round trip on every connection and leaves nothing recognisable in the opening
+bytes, which is the entire point of the exercise.
+
+**An inbound connection is sniffed, not guessed.** A plaintext handshake opens
+with `\x13BitTorrent protocol`; an MSE one opens with a Diffie-Hellman public
+key. Twenty bytes settle which is which, and the odds of a key impersonating
+the header are one in 2^160. The torrent an encrypted peer wants is hidden
+behind a hash of the shared secret, so it is found by trying every info-hash we
+hold — which is why the session keeps a lock-protected mirror of that set: the
+match happens on the connection's own queue, mid-handshake, where awaiting the
+session actor would deadlock the framing.
+
 **Web seeds needed something that already existed.** Mapping a piece onto the
 files it spans was inside `TorrentStorage`; a web seed needs the same mapping
 to turn a piece into HTTP range requests, so it moved to `TorrentMetainfo`
@@ -163,7 +188,7 @@ a connection per remote endpoint, which would mean thousands of objects.
 
 ## Tests
 
-`swift test` runs 79 tests. The ones that matter are in `TransferTests`: they
+`swift test` runs 101 tests. The ones that matter are in `TransferTests`: they
 stand up two real sessions on real sockets and move a real torrent between
 them over loopback — single-file, multi-file with pieces straddling file
 boundaries, a magnet link resolving its metadata over `ut_metadata`, and a
@@ -171,6 +196,11 @@ resume from persisted state. `PeerBanTests` adds a peer that answers every
 request with zeroes, which must be banned and disconnected. `WebSeedTests`
 stands up a real HTTP server that honours `Range` — including one that ignores
 it — and downloads a torrent with no peers whatsoever in full.
+`EncryptedTransferTests` repeats the whole transfer with MSE on, in every
+combination of off/prefer/require, including the fallback to plaintext and a
+peer that refuses a plaintext handshake outright, and `BigUIntTests` checks the
+modular arithmetic the key exchange runs on against vectors computed
+independently.
 
 There is also a live smoke test against the public network, off by default
 because it depends on strangers' upload slots:

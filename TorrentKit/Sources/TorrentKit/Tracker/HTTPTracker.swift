@@ -46,7 +46,7 @@ public struct HTTPTracker: TrackerClient {
 			"numwant=\(request.numberWanted)",
 			"key=\(request.key)",
 			"compact=1",
-			"supportcrypto=0",
+			"supportcrypto=\(request.supportsEncryption ? 1 : 0)",
 		]
 		if request.event != .periodic {
 			parameters.append("event=\(request.event.rawValue)")

@@ -18,6 +18,9 @@ public struct AnnounceRequest: Sendable {
 	public let numberWanted: Int
 	/// Stable per-session random key so trackers can recognise us across IP changes.
 	public let key: UInt32
+	/// Advertises MSE support, which some trackers use to pair us with peers
+	/// that also speak it.
+	public let supportsEncryption: Bool
 
 	public init(
 		infoHash: InfoHash,
@@ -28,7 +31,8 @@ public struct AnnounceRequest: Sendable {
 		left: Int64,
 		event: AnnounceEvent,
 		numberWanted: Int = 80,
-		key: UInt32
+		key: UInt32,
+		supportsEncryption: Bool = false
 	) {
 		self.infoHash = infoHash
 		self.peerID = peerID
@@ -38,6 +42,7 @@ public struct AnnounceRequest: Sendable {
 		self.left = left
 		self.event = event
 		self.numberWanted = numberWanted
+		self.supportsEncryption = supportsEncryption
 		self.key = key
 	}
 }

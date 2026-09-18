@@ -14,11 +14,20 @@ public enum PeerDisconnectReason: Sendable {
 	case protocolViolation(String)
 	case network(String)
 	case localChoice
+	/// The encrypted handshake did not work out. Worth distinguishing: a peer
+	/// that cannot do MSE is not a broken peer, it is one to redial in the
+	/// clear.
+	case encryptionFailed(String)
 
 	public var isFailure: Bool {
 		if case .closedByPeer = self { return false }
 		if case .localChoice = self { return false }
 		return true
+	}
+
+	public var allowsPlaintextRetry: Bool {
+		if case .encryptionFailed = self { return true }
+		return false
 	}
 }
 
@@ -34,6 +43,11 @@ public final class PeerConnection: @unchecked Sendable {
 	public enum Role: Sendable {
 		case outgoing(infoHash: InfoHash)
 		case incoming
+
+		var isIncoming: Bool {
+			if case .incoming = self { return true }
+			return false
+		}
 	}
 
 	/// A bitfield for a 4 TB torrent is ~500 KB; anything past a few megabytes
@@ -42,25 +56,52 @@ public final class PeerConnection: @unchecked Sendable {
 	private static let handshakeTimeout: TimeInterval = 15
 	private static let idleTimeout: TimeInterval = 120
 
+	/// What to do about MSE on an inbound connection before we have seen enough
+	/// bytes to tell an encrypted handshake from a plaintext one.
+	private enum InboundMode {
+		case undecided
+		case plaintext
+		case encrypted
+	}
+
 	public let address: PeerAddress
 	public let role: Role
 
 	private let localPeerID: PeerID
+	private let encryption: EncryptionPolicy
+	/// Inbound connections do not name their torrent in the clear, so the
+	/// handshake is matched against everything we are running.
+	private let knownInfoHashes: @Sendable () -> [InfoHash]
+
 	private let queue: DispatchQueue
 	private let connection: NWConnection
 	private var buffer = Data()
 	private var didHandshake = false
 	private var didFinish = false
+
+	private var handshakeEngine: MSEHandshake?
+	private var inboundMode: InboundMode = .undecided
+	/// Set once MSE has negotiated RC4; nil means the stream is in the clear,
+	/// whether or not an obfuscated handshake preceded it.
+	private var encryptor: RC4?
+	private var decryptor: RC4?
 	private var continuation: AsyncStream<PeerEvent>.Continuation?
 	private var timeoutWorkItem: DispatchWorkItem?
 	private var lastActivity = Date()
 
 	private let counters = ByteCounters()
 
-	public init(address: PeerAddress, role: Role, localPeerID: PeerID) {
+	public init(
+		address: PeerAddress,
+		role: Role,
+		localPeerID: PeerID,
+		encryption: EncryptionPolicy = .disabled
+	) {
 		self.address = address
 		self.role = role
 		self.localPeerID = localPeerID
+		self.encryption = encryption
+		self.knownInfoHashes = { [] }
 		self.queue = DispatchQueue(label: "itorrent.peer.\(address.description)")
 
 		let parameters = NWParameters.tcp
@@ -75,10 +116,18 @@ public final class PeerConnection: @unchecked Sendable {
 	}
 
 	/// Wraps a connection handed over by `PeerListener`.
-	public init(incoming connection: NWConnection, address: PeerAddress, localPeerID: PeerID) {
+	public init(
+		incoming connection: NWConnection,
+		address: PeerAddress,
+		localPeerID: PeerID,
+		encryption: EncryptionPolicy = .disabled,
+		knownInfoHashes: @escaping @Sendable () -> [InfoHash] = { [] }
+	) {
 		self.address = address
 		self.role = .incoming
 		self.localPeerID = localPeerID
+		self.encryption = encryption
+		self.knownInfoHashes = knownInfoHashes
 		self.queue = DispatchQueue(label: "itorrent.peer.in.\(address.description)")
 		self.connection = connection
 	}
@@ -141,7 +190,10 @@ public final class PeerConnection: @unchecked Sendable {
 		}
 	}
 
-	private func transmit(_ data: Data) {
+	/// - Parameter encrypted: false only for the MSE handshake itself, which is
+	///   obfuscated by its own construction and must not go through the cipher.
+	private func transmit(_ data: Data, encrypted: Bool = true) {
+		let data = encrypted ? (encryptor?.process(data) ?? data) : data
 		connection.send(content: data, completion: .contentProcessed { [weak self] error in
 			guard let self else { return }
 			if let error {
@@ -159,7 +211,20 @@ public final class PeerConnection: @unchecked Sendable {
 		case .ready:
 			lastActivity = Date()
 			if case let .outgoing(infoHash) = role {
-				transmit(PeerHandshake(infoHash: infoHash, peerID: localPeerID.raw).encoded())
+				let handshake = PeerHandshake(infoHash: infoHash, peerID: localPeerID.raw).encoded()
+				if encryption == .disabled {
+					transmit(handshake)
+				} else {
+					// The BitTorrent handshake travels as MSE's initial payload
+					// rather than after it, which saves a round trip and leaves
+					// nothing recognisable in the opening bytes.
+					let engine = MSEHandshake(
+						role: .initiator(infoHash: infoHash, payload: handshake),
+						policy: encryption
+					)
+					handshakeEngine = engine
+					transmit(engine.begin(), encrypted: false)
+				}
 			}
 			receiveNext()
 
@@ -190,8 +255,7 @@ public final class PeerConnection: @unchecked Sendable {
 				if let data, !data.isEmpty {
 					self.counters.addReceived(data.count)
 					self.lastActivity = Date()
-					self.buffer.append(data)
-					self.drainBuffer()
+					self.ingest(data)
 				}
 				if isComplete {
 					self.finish(reason: .closedByPeer)
@@ -200,6 +264,77 @@ public final class PeerConnection: @unchecked Sendable {
 				guard !self.didFinish else { return }
 				self.receiveNext()
 			}
+		}
+	}
+
+	/// Routes freshly arrived bytes: through the MSE handshake while one is in
+	/// progress, through the cipher once one has been negotiated, and straight
+	/// into the framing buffer otherwise.
+	private func ingest(_ data: Data) {
+		if let engine = handshakeEngine {
+			advance(engine, with: data)
+			return
+		}
+		if case .undecided = inboundMode, role.isIncoming, encryption != .disabled {
+			decideInboundMode(with: data)
+			return
+		}
+		buffer.append(decryptor?.process(data) ?? data)
+		drainBuffer()
+	}
+
+	/// Tells an encrypted handshake from a plaintext one.
+	///
+	/// A plaintext handshake opens with the protocol string, and the odds of an
+	/// MSE public key doing the same are one in 2^160 — so the first twenty
+	/// bytes settle it, and nothing has to be guessed from a single byte.
+	private func decideInboundMode(with data: Data) {
+		buffer.append(data)
+		guard buffer.count >= PeerHandshake.protocolHeader.count else { return }
+
+		if buffer.prefix(PeerHandshake.protocolHeader.count) == PeerHandshake.protocolHeader {
+			guard encryption != .required else {
+				finish(reason: .protocolViolation("Plaintext handshake refused"))
+				return
+			}
+			inboundMode = .plaintext
+			drainBuffer()
+			return
+		}
+
+		inboundMode = .encrypted
+		let engine = MSEHandshake(
+			role: .receiver(candidates: knownInfoHashes),
+			policy: encryption
+		)
+		handshakeEngine = engine
+		let pending = buffer
+		buffer = Data()
+		advance(engine, with: pending)
+	}
+
+	private func advance(_ engine: MSEHandshake, with data: Data) {
+		let progress = engine.consume(data)
+		if !progress.outgoing.isEmpty {
+			transmit(progress.outgoing, encrypted: false)
+		}
+
+		switch progress.outcome {
+		case .needMoreData:
+			return
+
+		case let .failed(reason):
+			Log.peer.debug("MSE handshake with \(self.address.description, privacy: .public) failed: \(reason, privacy: .public)")
+			handshakeEngine = nil
+			finish(reason: .encryptionFailed(reason))
+
+		case let .completed(completion):
+			handshakeEngine = nil
+			encryptor = completion.encrypt
+			decryptor = completion.decrypt
+			Log.peer.debug("MSE handshake with \(self.address.description, privacy: .public) completed")
+			buffer.append(completion.leftover)
+			drainBuffer()
 		}
 	}
 
@@ -283,6 +418,19 @@ public final class PeerConnection: @unchecked Sendable {
 	private func finish(reason: PeerDisconnectReason) {
 		guard !didFinish else { return }
 		didFinish = true
+
+		// Anything that goes wrong while the encrypted handshake is still in
+		// flight is a failure *of* that handshake, whatever the socket called
+		// it. A peer with encryption switched off does not answer politely: it
+		// reads our public key as a malformed handshake and hangs up, which
+		// arrives here as an ordinary close. Reporting it as such would retire
+		// a peer that plaintext would have reached.
+		var reason = reason
+		if handshakeEngine != nil, !didHandshake {
+			if case .localChoice = reason {} else {
+				reason = .encryptionFailed("Connection lost during the encrypted handshake")
+			}
+		}
 		timeoutWorkItem?.cancel()
 		timeoutWorkItem = nil
 		connection.stateUpdateHandler = nil

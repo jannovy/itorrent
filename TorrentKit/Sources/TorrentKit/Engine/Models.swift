@@ -160,6 +160,10 @@ public struct SessionSettings: Sendable, Codable, Equatable {
 	/// BEP 19 web seeds. On by default: a torrent whose swarm has died still
 	/// downloads at full speed from the HTTP server that published it.
 	public var areWebSeedsEnabled: Bool
+	/// MSE/PE protocol encryption. Preferred by default, which is what every
+	/// desktop client ships: encrypted where the peer can, plaintext where it
+	/// cannot, so no peer is lost to the setting.
+	public var encryptionPolicy: EncryptionPolicy
 	public var maximumPeersPerTorrent: Int
 	public var maximumGlobalPeers: Int
 	public var maximumActiveTorrents: Int
@@ -183,6 +187,7 @@ public struct SessionSettings: Sendable, Codable, Equatable {
 		isPeerExchangeEnabled: true,
 		isLocalDiscoveryEnabled: false,
 		areWebSeedsEnabled: true,
+		encryptionPolicy: .preferred,
 		maximumPeersPerTorrent: 50,
 		maximumGlobalPeers: 200,
 		maximumActiveTorrents: 5,
@@ -199,6 +204,7 @@ public struct SessionSettings: Sendable, Codable, Equatable {
 		isPeerExchangeEnabled: Bool,
 		isLocalDiscoveryEnabled: Bool,
 		areWebSeedsEnabled: Bool,
+		encryptionPolicy: EncryptionPolicy,
 		maximumPeersPerTorrent: Int,
 		maximumGlobalPeers: Int,
 		maximumActiveTorrents: Int,
@@ -213,6 +219,7 @@ public struct SessionSettings: Sendable, Codable, Equatable {
 		self.isPeerExchangeEnabled = isPeerExchangeEnabled
 		self.isLocalDiscoveryEnabled = isLocalDiscoveryEnabled
 		self.areWebSeedsEnabled = areWebSeedsEnabled
+		self.encryptionPolicy = encryptionPolicy
 		self.maximumPeersPerTorrent = maximumPeersPerTorrent
 		self.maximumGlobalPeers = maximumGlobalPeers
 		self.maximumActiveTorrents = maximumActiveTorrents
@@ -246,6 +253,7 @@ public struct SessionSettings: Sendable, Codable, Equatable {
 		isPeerExchangeEnabled = value(.isPeerExchangeEnabled, fallback.isPeerExchangeEnabled)
 		isLocalDiscoveryEnabled = value(.isLocalDiscoveryEnabled, fallback.isLocalDiscoveryEnabled)
 		areWebSeedsEnabled = value(.areWebSeedsEnabled, fallback.areWebSeedsEnabled)
+		encryptionPolicy = value(.encryptionPolicy, fallback.encryptionPolicy)
 		maximumPeersPerTorrent = value(.maximumPeersPerTorrent, fallback.maximumPeersPerTorrent)
 		maximumGlobalPeers = value(.maximumGlobalPeers, fallback.maximumGlobalPeers)
 		maximumActiveTorrents = value(.maximumActiveTorrents, fallback.maximumActiveTorrents)

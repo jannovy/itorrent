@@ -173,6 +173,11 @@ public struct PeerHandshake: Sendable, Equatable {
 	public static let protocolName = "BitTorrent protocol"
 	public static let byteCount = 68
 
+	/// The twenty bytes every plaintext handshake opens with: the length prefix
+	/// and the protocol name. Used to tell a plaintext peer from an encrypted
+	/// one before either has said anything else.
+	public static let protocolHeader = Data([UInt8(protocolName.utf8.count)]) + Data(protocolName.utf8)
+
 	public let infoHash: InfoHash
 	public let peerID: Data
 	public let reserved: Data

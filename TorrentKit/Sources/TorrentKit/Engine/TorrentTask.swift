@@ -78,6 +78,11 @@ public actor TorrentTask {
 	private(set) var bannedHosts: Set<String> = []
 	private var hashFailuresByHost: [String: Int] = [:]
 
+	/// Peers whose encrypted handshake failed, to be redialled in the clear.
+	/// Plenty of peers — and most private trackers' seedboxes — speak only one
+	/// of the two, so giving up after the first attempt would lose them.
+	private var plaintextRetries: Set<PeerAddress> = []
+
 	private var status: TorrentStatus = .queued
 	private var errorMessage: String?
 	private var addedAt = Date()
@@ -300,6 +305,7 @@ public actor TorrentTask {
 	private func tick() async {
 		guard !isShuttingDown, !status.isPaused else { return }
 		let settings = await environment.currentSettings()
+		await trackers.setSupportsEncryption(settings.encryptionPolicy != .disabled)
 
 		updateRates()
 		expireStaleRequests()
@@ -555,15 +561,23 @@ public actor TorrentTask {
 			let address = candidatePeers.removeFirst()
 			guard peers[address] == nil, !attemptedPeers.contains(address) else { continue }
 			attemptedPeers.insert(address)
-			connect(to: address)
+			connect(to: address, encryption: encryptionPolicy(for: address, settings: settings))
 		}
 	}
 
-	private func connect(to address: PeerAddress) {
+	/// A peer that could not do MSE is redialled in the clear, unless the user
+	/// asked for encryption to be mandatory.
+	private func encryptionPolicy(for address: PeerAddress, settings: SessionSettings) -> EncryptionPolicy {
+		guard settings.encryptionPolicy == .preferred else { return settings.encryptionPolicy }
+		return plaintextRetries.contains(address) ? .disabled : .preferred
+	}
+
+	private func connect(to address: PeerAddress, encryption: EncryptionPolicy) {
 		let connection = PeerConnection(
 			address: address,
 			role: .outgoing(infoHash: infoHash),
-			localPeerID: environment.peerID
+			localPeerID: environment.peerID,
+			encryption: encryption
 		)
 		let session = PeerSession(
 			connection: connection,
@@ -1060,6 +1074,13 @@ public actor TorrentTask {
 		if !session.isIncoming, session.remotePeerID == nil {
 			connectingCount = max(0, connectingCount - 1)
 		}
+
+		// Queue one plaintext retry for a peer that could not manage MSE. The
+		// address is taken off the attempted list so the next tick redials it.
+		if reason.allowsPlaintextRetry, !session.isIncoming, !plaintextRetries.contains(address) {
+			plaintextRetries.insert(address)
+			retry(address)
+		}
 		sessionDownloadedBytes += session.downloadedBytes
 		if session.didReceiveBitfield {
 			picker?.removeAvailability(bitfield: session.bitfield)
@@ -1071,6 +1092,14 @@ public actor TorrentTask {
 
 	private func disconnect(address: PeerAddress, reason: PeerDisconnectReason) {
 		peers[address]?.connection.close(reason: reason)
+	}
+
+	/// Puts an address back in the queue for one more attempt, under whatever
+	/// different terms the caller has just recorded.
+	private func retry(_ address: PeerAddress) {
+		attemptedPeers.remove(address)
+		guard !bannedHosts.contains(address.host), !candidatePeers.contains(address) else { return }
+		candidatePeers.append(address)
 	}
 
 	// MARK: - File selection

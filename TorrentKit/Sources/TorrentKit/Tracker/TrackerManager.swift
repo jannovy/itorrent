@@ -82,6 +82,7 @@ public actor TrackerManager {
 	private let peerID: PeerID
 	private let key = UInt32.random(in: .min ... .max)
 	private var listenPort: UInt16
+	private var supportsEncryption = false
 	private var entries: [String: Entry] = [:]
 	private var order: [String] = []
 	private var hasSentStarted = false
@@ -130,6 +131,11 @@ public actor TrackerManager {
 	}
 
 	public var trackerURLs: [String] { order }
+
+	/// Mirrors the session's encryption setting into the announce.
+	public func setSupportsEncryption(_ supported: Bool) {
+		supportsEncryption = supported
+	}
 
 	public func setListenPort(_ port: UInt16) {
 		listenPort = port
@@ -206,7 +212,8 @@ public actor TrackerManager {
 			downloaded: statistics.downloaded,
 			left: statistics.left,
 			event: effectiveEvent,
-			key: key
+			key: key,
+			supportsEncryption: supportsEncryption
 		)
 
 		let clients = due.compactMap { url in entries[url]?.client.map { (url, $0) } }

@@ -32,6 +32,11 @@ public actor TorrentSession: TorrentEnvironment {
 	private var order: [InfoHash] = []
 	private var downloadDirectory: URL
 
+	/// Readable without entering the actor, because an inbound encrypted
+	/// handshake has to be matched against every torrent we hold *while* the
+	/// connection's serial queue is parsing it.
+	private let infoHashRegistry = InfoHashRegistry()
+
 	private var listenerTask: Task<Void, Never>?
 	private var publishTask: Task<Void, Never>?
 	private var dhtMaintenanceTask: Task<Void, Never>?
@@ -169,10 +174,13 @@ public actor TorrentSession: TorrentEnvironment {
 	// MARK: - Inbound connections
 
 	private func accept(_ incoming: PeerListener.Incoming) async {
+		let registry = infoHashRegistry
 		let connection = PeerConnection(
 			incoming: incoming.connection,
 			address: incoming.address,
-			localPeerID: peerID
+			localPeerID: peerID,
+			encryption: settings.encryptionPolicy,
+			knownInfoHashes: { registry.all }
 		)
 		let channel = PeerEventChannel(connection.start())
 
@@ -213,6 +221,7 @@ public actor TorrentSession: TorrentEnvironment {
 		)
 		tasks[infoHash] = task
 		order.append(infoHash)
+		infoHashRegistry.insert(infoHash)
 
 		if case let .metainfo(metainfo) = source {
 			store.saveMetainfo(metainfo, forInfoHashHex: infoHash.hex)
@@ -252,6 +261,7 @@ public actor TorrentSession: TorrentEnvironment {
 	public func remove(infoHash: InfoHash, deleteFiles: Bool) async {
 		guard let task = tasks.removeValue(forKey: infoHash) else { return }
 		order.removeAll { $0 == infoHash }
+		infoHashRegistry.remove(infoHash)
 		snapshots[infoHash] = nil
 		await task.shutdown(deleteFiles: deleteFiles)
 		store.delete(infoHashHex: infoHash.hex)
@@ -350,6 +360,7 @@ public actor TorrentSession: TorrentEnvironment {
 			)
 			tasks[infoHash] = task
 			order.append(infoHash)
+			infoHashRegistry.insert(infoHash)
 
 			Log.session.info("Restored \(state.name, privacy: .public) paused=\(state.isPaused)")
 			if state.isPaused {
@@ -499,4 +510,20 @@ public actor TorrentSession: TorrentEnvironment {
 	public func persist(metainfo: TorrentMetainfo) async {
 		store.saveMetainfo(metainfo, forInfoHashHex: metainfo.infoHash.hex)
 	}
+}
+
+/// The set of torrents the session is running, readable from any queue.
+///
+/// An encrypted handshake hides the info-hash behind a hash of the shared
+/// secret, so the only way to tell which torrent an inbound peer wants is to
+/// try them all — on the connection's own queue, while it is mid-handshake.
+/// Awaiting the session actor from there would deadlock the framing.
+final class InfoHashRegistry: @unchecked Sendable {
+	private let lock = NSLock()
+	private var storage: Set<InfoHash> = []
+
+	var all: [InfoHash] { lock.withLock { Array(storage) } }
+
+	func insert(_ infoHash: InfoHash) { lock.withLock { _ = storage.insert(infoHash) } }
+	func remove(_ infoHash: InfoHash) { lock.withLock { _ = storage.remove(infoHash) } }
 }

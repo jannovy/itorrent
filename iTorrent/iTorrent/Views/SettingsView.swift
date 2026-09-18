@@ -34,6 +34,18 @@ struct SettingsView: View {
 				}
 
 				Section {
+					Picker("Encryption", selection: $draft.encryptionPolicy) {
+						ForEach(EncryptionPolicy.allCases, id: \.self) { policy in
+							Text(policy.label).tag(policy)
+						}
+					}
+				} header: {
+					Text("Transport")
+				} footer: {
+					Text("Encryption hides the protocol from equipment that throttles BitTorrent, and is needed for peers that accept nothing else. \"Prefer\" falls back to plaintext rather than losing a peer.")
+				}
+
+				Section {
 					speedPicker("Download limit", selection: $draft.downloadLimit)
 					speedPicker("Upload limit", selection: $draft.uploadLimit)
 				} header: {
@@ -94,6 +106,7 @@ struct SettingsView: View {
 					LabeledValue("Client", "iTorrent 1.0")
 					LabeledValue("Peer ID prefix", PeerID.clientPrefix, isMonospaced: true)
 					LabeledValue("Protocols", "BEP 3, 5, 9, 10, 11, 12, 15, 19, 23, 47")
+					LabeledValue("Encryption", "MSE/PE (RC4)")
 				}
 			}
 			.navigationTitle("Settings")
