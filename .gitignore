@@ -16,6 +16,10 @@ Downloads/
 *.torrent
 !Tests/**/*.torrent
 
+# Build artefacts for a release; published to GitHub, not committed
+dist/
+*.ipa
+
 # macOS
 .DS_Store
 
