@@ -191,7 +191,7 @@ claimed is reserved in the `PiecePicker`, so peers do not fetch it in parallel.
 
 ## Tests
 
-`swift test` runs 121 tests. The ones that matter stand up two real sessions on
+`swift test` runs 127 tests. The ones that matter stand up two real sessions on
 real sockets and move a real torrent between them over loopback:
 
 - `TransferTests` — single-file, multi-file with pieces straddling file
@@ -233,8 +233,12 @@ Categories: `session`, `torrent`, `peer`, `tracker`, `dht`, `storage`.
 
 ## iOS specifics
 
-- Downloads go to `Documents/Downloads` and are visible in Files under
-  "On My iPhone → iTorrent" (`UIFileSharingEnabled`).
+- Downloads go to `Documents/Downloads` by default, visible in Files under
+  "On My iPhone → iTorrent" (`UIFileSharingEnabled`). Settings can point them
+  at any folder the Files app can reach — an external drive, iCloud Drive —
+  which is kept as a security-scoped bookmark and reopened at launch. Torrents
+  already added keep the folder they were added with; only new ones follow the
+  setting.
 - Torrent data is excluded from iCloud backups; Apple rejects apps that back up
   re-downloadable content.
 - ATS is disabled (`NSAllowsArbitraryLoads`) because most trackers and web

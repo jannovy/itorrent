@@ -6,7 +6,7 @@ struct SettingsView: View {
 	@Environment(\.dismiss) private var dismiss
 
 	@State private var draft = SessionSettings.default
-	@State private var downloadFolder: URL?
+	@State private var isChoosingFolder = false
 
 	/// Speed limits are edited as a menu of sane values rather than a free text
 	/// field; typing bytes-per-second on a phone is nobody's idea of a good time.
@@ -90,17 +90,29 @@ struct SettingsView: View {
 				}
 
 				Section {
-					if let downloadFolder {
-						LabeledValue("Downloads", downloadFolder.lastPathComponent)
-						Text(downloadFolder.path)
-							.font(.caption2)
-							.foregroundStyle(.secondary)
-							.textSelection(.enabled)
+					LabeledValue("Downloads", store.downloadFolder.lastPathComponent)
+					Text(store.downloadFolder.path)
+						.font(.caption2)
+						.foregroundStyle(.secondary)
+						.textSelection(.enabled)
+
+					Button {
+						isChoosingFolder = true
+					} label: {
+						Label("Choose folder…", systemImage: "folder")
+					}
+
+					if !store.isUsingDefaultDownloadFolder {
+						Button(role: .destructive) {
+							Task { await store.useDefaultDownloadFolder() }
+						} label: {
+							Label("Use iTorrent's own folder", systemImage: "arrow.uturn.backward")
+						}
 					}
 				} header: {
 					Text("Storage")
 				} footer: {
-					Text("Downloads live in the app's Documents folder and are visible in Files under \"On My iPhone → iTorrent\".")
+					Text(storageFooter)
 				}
 
 				Section("About") {
@@ -126,11 +138,32 @@ struct SettingsView: View {
 					.disabled(draft == store.settings)
 				}
 			}
+			.fileImporter(
+				isPresented: $isChoosingFolder,
+				allowedContentTypes: [.folder]
+			) { result in
+				switch result {
+				case let .success(url):
+					Task { await store.chooseDownloadFolder(url) }
+				case let .failure(error):
+					store.message = TorrentStore.Message(
+						title: "Could not use that folder",
+						detail: error.localizedDescription,
+						isError: true
+					)
+				}
+			}
 			.task {
 				draft = store.settings
-				downloadFolder = await store.downloadFolder
 			}
 		}
+	}
+
+	private var storageFooter: String {
+		if store.isUsingDefaultDownloadFolder {
+			return "Downloads live in the app's Documents folder and are visible in Files under \"On My iPhone → iTorrent\". Choosing another folder works too — an external drive, iCloud Drive, or anywhere else the Files app can reach."
+		}
+		return "Torrents added from now on are saved here. Ones already added keep the folder they were added with, so nothing moves behind your back. If this folder becomes unavailable — an unplugged drive, say — iTorrent falls back to its own folder and says so."
 	}
 
 	private func speedPicker(_ title: String, selection: Binding<Int>) -> some View {

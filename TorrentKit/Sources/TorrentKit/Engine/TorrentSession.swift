@@ -4,12 +4,14 @@ public enum SessionError: Error, LocalizedError {
 	case duplicateTorrent(name: String)
 	case storageUnavailable
 	case unreadableTorrentFile
+	case downloadFolderUnusable(path: String, reason: String)
 
 	public var errorDescription: String? {
 		switch self {
 		case let .duplicateTorrent(name): "'\(name)' has already been added."
 		case .storageUnavailable: "The download folder could not be created."
 		case .unreadableTorrentFile: "That file is not a valid .torrent."
+		case let .downloadFolderUnusable(path, reason): "'\(path)' cannot be used for downloads: \(reason)"
 		}
 	}
 }
@@ -525,6 +527,36 @@ public actor TorrentSession: TorrentEnvironment {
 	}
 
 	public var downloadFolder: URL { downloadDirectory }
+
+	/// Chooses where newly added torrents are saved.
+	///
+	/// Torrents already running keep the folder they were added with. Their
+	/// data is there, and silently moving gigabytes because a preference
+	/// changed is not something to do behind someone's back.
+	///
+	/// The folder is written to before it is accepted: a location picked from
+	/// the Files app can be on a share that is gone, or read-only, and finding
+	/// that out when the first piece completes means a torrent failing for
+	/// reasons the user cannot connect to what they just did.
+	public func setDownloadDirectory(_ url: URL) throws {
+		let manager = FileManager.default
+		do {
+			try manager.createDirectory(at: url, withIntermediateDirectories: true)
+		} catch {
+			throw SessionError.downloadFolderUnusable(path: url.path, reason: error.localizedDescription)
+		}
+
+		let probe = url.appendingPathComponent(".itorrent-write-test")
+		do {
+			try Data([0]).write(to: probe, options: .atomic)
+			try? manager.removeItem(at: probe)
+		} catch {
+			throw SessionError.downloadFolderUnusable(path: url.path, reason: "it is not writable")
+		}
+
+		downloadDirectory = url
+		Log.session.info("Downloads now go to \(url.path, privacy: .public)")
+	}
 
 	// MARK: - TorrentEnvironment
 

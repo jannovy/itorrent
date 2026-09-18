@@ -43,14 +43,14 @@ final class TorrentStore {
 	var settings: SessionSettings = .default
 	var filter: Filter = .all
 	var message: Message?
+	/// Where new torrents are saved. Mirrored here so the UI can read it
+	/// without awaiting the session actor on every redraw.
+	private(set) var downloadFolder: URL = DownloadFolder.defaultURL
+	private(set) var isUsingDefaultDownloadFolder = true
 
 	private let session = TorrentSession()
 	private var observationTask: Task<Void, Never>?
 	private var statisticsTask: Task<Void, Never>?
-
-	var downloadFolder: URL {
-		get async { await session.downloadFolder }
-	}
 
 	var filteredTorrents: [TorrentSnapshot] {
 		switch filter {
@@ -73,6 +73,7 @@ final class TorrentStore {
 
 	func start() async {
 		guard !isReady else { return }
+		await restoreDownloadFolder()
 		await session.start()
 		settings = await session.currentSettings()
 		isReady = true
@@ -91,6 +92,77 @@ final class TorrentStore {
 				await MainActor.run { self.statistics = latest }
 				try? await Task.sleep(nanoseconds: 1_000_000_000)
 			}
+		}
+	}
+
+	// MARK: - Download folder
+
+	/// Reopens the folder the user chose last time, before the session starts
+	/// restoring torrents into it.
+	private func restoreDownloadFolder() async {
+		do {
+			guard let url = try DownloadFolder.restore() else { return }
+			try await session.setDownloadDirectory(url)
+			downloadFolder = url
+			isUsingDefaultDownloadFolder = false
+		} catch {
+			// The folder is gone or no longer writable. Say so once and carry
+			// on with the default rather than refusing to start.
+			DownloadFolder.forget()
+			downloadFolder = DownloadFolder.defaultURL
+			isUsingDefaultDownloadFolder = true
+			message = Message(
+				title: "Download folder unavailable",
+				detail: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
+				isError: true
+			)
+		}
+	}
+
+	/// Adopts a folder the user picked in the Files app.
+	func chooseDownloadFolder(_ url: URL) async {
+		guard DownloadFolder.open(url) else {
+			message = Message(
+				title: "Could not use that folder",
+				detail: "iTorrent was not given permission to write to it.",
+				isError: true
+			)
+			return
+		}
+
+		do {
+			try await session.setDownloadDirectory(url)
+			try DownloadFolder.remember(url)
+			downloadFolder = url
+			isUsingDefaultDownloadFolder = false
+			message = Message(
+				title: "Downloads will go to \(url.lastPathComponent)",
+				detail: "Torrents already added keep their current folder.",
+				isError: false
+			)
+		} catch {
+			DownloadFolder.forget()
+			message = Message(
+				title: "Could not use that folder",
+				detail: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
+				isError: true
+			)
+		}
+	}
+
+	/// Goes back to the folder inside the app, the one visible in Files.
+	func useDefaultDownloadFolder() async {
+		DownloadFolder.forget()
+		do {
+			try await session.setDownloadDirectory(DownloadFolder.defaultURL)
+			downloadFolder = DownloadFolder.defaultURL
+			isUsingDefaultDownloadFolder = true
+		} catch {
+			message = Message(
+				title: "Could not use the default folder",
+				detail: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
+				isError: true
+			)
 		}
 	}
 
