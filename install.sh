@@ -159,9 +159,14 @@ xcrun devicectl list devices --json-output "$devices_json" >/dev/null 2>&1 \
 	|| fail "devicectl could not talk to CoreDevice." \
 		"Open Xcode once and let it finish installing components, then retry."
 
-# Emits one tab-separated row per usable device.
+# Emits one tab-separated row per iOS device, ready or not.
+#
+# Devices that are visible but unusable are reported rather than hidden: a
+# half-paired iPhone is the commonest reason this fails, and dropping it from
+# the list silently leaves the user staring at "no device found" while the
+# thing sits plugged in front of them.
 read_devices() {
-	python3 - "$devices_json" "$MINIMUM_IOS" <<'PY'
+	python3 - "$devices_json" "$MINIMUM_IOS" <<'PYEOF'
 import json, sys
 
 path, minimum = sys.argv[1], int(sys.argv[2])
@@ -175,8 +180,6 @@ for device in payload.get("result", {}).get("devices", []):
 
     if hardware.get("platform") != "iOS":
         continue
-    if connection.get("tunnelState") == "unavailable":
-        continue
 
     version = properties.get("osVersionNumber") or "0"
     try:
@@ -184,81 +187,136 @@ for device in payload.get("result", {}).get("devices", []):
     except ValueError:
         major = 0
 
-    print("\t".join([
+    pairing = connection.get("pairingState") or "unknown"
+    developer_mode = properties.get("developerModeStatus") or "unknown"
+
+    # First unmet requirement wins, in the order the user has to fix them.
+    if pairing != "paired":
+        status = "unpaired"
+    elif major < minimum:
+        status = "oldos"
+    elif developer_mode != "enabled":
+        status = "devmode"
+    else:
+        status = "ready"
+
+    print("	".join([
         device.get("identifier", ""),
-        properties.get("name", "device"),
-        hardware.get("marketingName", ""),
+        properties.get("name") or "device",
+        hardware.get("marketingName") or hardware.get("productType") or "iPhone",
         version,
-        "old" if major < minimum else "ok",
-        properties.get("developerModeStatus", "unknown"),
-        connection.get("tunnelState", "unknown"),
+        status,
     ]))
-PY
+PYEOF
+}
+
+# What to do about whatever is standing in a given device's way.
+explain_device_status() {
+	case "$1" in
+		unpaired)
+			printf '%s\n' \
+				"Unlock it, then tap 'Trust This Computer' on the device." \
+				"If no prompt appeared, unplug and replug the cable." ;;
+		oldos)
+			printf '%s\n' "iTorrent needs iOS $MINIMUM_IOS or later." ;;
+		devmode)
+			printf '%s\n' \
+				"Turn on Developer Mode:" \
+				"  Settings -> Privacy & Security -> Developer Mode" \
+				"The device restarts afterwards." ;;
+	esac
 }
 
 # Built with a loop rather than `mapfile`, which is bash 4 only: macOS still
 # ships bash 3.2, where the script would die here at runtime.
-device_rows=()
+ready_rows=()
+blocked_rows=()
 while IFS= read -r device_line; do
-	[[ -n "$device_line" ]] && device_rows+=("$device_line")
+	[[ -n "$device_line" ]] || continue
+	if [[ "$device_line" == *$'	'ready ]]; then
+		ready_rows+=("$device_line")
+	else
+		blocked_rows+=("$device_line")
+	fi
 done < <(read_devices)
 
-if [[ ${#device_rows[@]} -eq 0 ]]; then
-	fail "No iPhone or iPad found." \
-		"Check all of these:" \
-		"  * connected by cable (Wi-Fi pairing also works once set up in Xcode)" \
-		"  * unlocked, and 'Trust This Computer' tapped" \
-		"  * Developer Mode on: Settings → Privacy & Security → Developer Mode"
-fi
+describe_row() {
+	IFS=$'	' read -r udid name model version status <<<"$1"
+	printf '  %s%s%s — %s, iOS %s\n' "$BOLD" "$name" "$RESET" "$model" "$version"
+	printf '  %s%s%s\n' "$DIM" "$udid" "$RESET"
+	if [[ "$status" != "ready" ]]; then
+		explain_device_status "$status" | sed 's/^/  /'
+	fi
+}
 
 if [[ "${LIST_ONLY:-0}" == "1" ]]; then
 	printf '\n'
-	for row in "${device_rows[@]}"; do
-		IFS=$'\t' read -r udid name model version age mode state <<<"$row"
-		printf '  %s%s%s  %s, iOS %s\n  %s%s%s\n\n' \
-			"$BOLD" "$name" "$RESET" "$model" "$version" "$DIM" "$udid" "$RESET"
-	done
+	if [[ ${#ready_rows[@]} -eq 0 && ${#blocked_rows[@]} -eq 0 ]]; then
+		printf '  No iPhone or iPad is connected.\n\n'
+		exit 0
+	fi
+	for row in "${ready_rows[@]:-}"; do [[ -n "$row" ]] && { describe_row "$row"; printf '\n'; }; done
+	for row in "${blocked_rows[@]:-}"; do [[ -n "$row" ]] && { describe_row "$row"; printf '\n'; }; done
 	exit 0
+fi
+
+# Nothing usable: say why, per device, instead of a bare "not found".
+if [[ ${#ready_rows[@]} -eq 0 ]]; then
+	if [[ ${#blocked_rows[@]} -eq 0 ]]; then
+		fail "No iPhone or iPad found." \
+			"Connect one by cable, unlock it, and tap 'Trust This Computer'." \
+			"Then turn on Settings -> Privacy & Security -> Developer Mode."
+	fi
+	printf '\n'
+	for row in "${blocked_rows[@]}"; do describe_row "$row"; printf '\n'; done
+	fail "No device is ready to install to." "Fix the above and run this script again."
 fi
 
 selected_row=""
 if [[ -n "$DEVICE_UDID" ]]; then
-	for row in "${device_rows[@]}"; do
-		[[ "$row" == "$DEVICE_UDID"* ]] && selected_row="$row"
+	for row in "${ready_rows[@]}"; do
+		[[ "$row" == "$DEVICE_UDID"$'	'* ]] && selected_row="$row"
 	done
-	[[ -n "$selected_row" ]] || fail "No connected device with UDID $DEVICE_UDID." \
-		"Run ./install.sh --list-devices to see what is available."
-elif [[ ${#device_rows[@]} -eq 1 ]]; then
-	selected_row="${device_rows[0]}"
+	if [[ -z "$selected_row" ]]; then
+		for row in "${blocked_rows[@]:-}"; do
+			if [[ -n "$row" && "$row" == "$DEVICE_UDID"$'	'* ]]; then
+				printf '\n'
+				describe_row "$row"
+				printf '\n'
+				fail "That device is not ready yet." "Fix the above and run this script again."
+			fi
+		done
+		fail "No connected device with UDID $DEVICE_UDID." \
+			"Run ./install.sh --list-devices to see what is available."
+	fi
+elif [[ ${#ready_rows[@]} -eq 1 ]]; then
+	selected_row="${ready_rows[0]}"
 else
-	printf '\n  More than one device is connected:\n\n'
+	printf '\n  More than one device is ready:\n\n'
 	index=1
-	for row in "${device_rows[@]}"; do
-		IFS=$'\t' read -r _ name model version _ _ _ <<<"$row"
+	for row in "${ready_rows[@]}"; do
+		IFS=$'	' read -r _ name model version _ <<<"$row"
 		printf '    %d) %s — %s, iOS %s\n' "$index" "$name" "$model" "$version"
 		index=$((index + 1))
 	done
-	printf '\n  Which one? [1-%d] ' "${#device_rows[@]}"
+	printf '\n  Which one? [1-%d] ' "${#ready_rows[@]}"
 	read -r choice
-	[[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#device_rows[@]} )) \
+	[[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#ready_rows[@]} )) \
 		|| fail "That is not one of the choices."
-	selected_row="${device_rows[$((choice - 1))]}"
+	selected_row="${ready_rows[$((choice - 1))]}"
 fi
 
-IFS=$'\t' read -r DEVICE_UDID device_name device_model ios_version version_age developer_mode tunnel_state <<<"$selected_row"
-
-[[ "$version_age" == "ok" ]] || fail "$device_name runs iOS $ios_version." \
-	"iTorrent needs iOS $MINIMUM_IOS or later."
-
-if [[ "$developer_mode" != "enabled" ]]; then
-	fail "Developer Mode is off on $device_name." \
-		"Turn it on:  Settings → Privacy & Security → Developer Mode" \
-		"The device restarts afterwards. Then run this script again."
-fi
-
+IFS=$'	' read -r DEVICE_UDID device_name device_model ios_version _ <<<"$selected_row"
 ok "$device_name — $device_model, iOS $ios_version"
 note "$DEVICE_UDID"
-[[ "$tunnel_state" == "connected" ]] || warn "Connection state is '$tunnel_state'; the install may be slow to start."
+
+# Anything connected but not ready is worth mentioning, in case it is the one
+# the user actually meant.
+for row in "${blocked_rows[@]:-}"; do
+	[[ -n "$row" ]] || continue
+	IFS=$'	' read -r _ other_name _ _ other_status <<<"$row"
+	warn "$other_name is connected but not ready ($other_status); skipping it."
+done
 
 # ---------------------------------------------------- 4. the bundle id ------
 
