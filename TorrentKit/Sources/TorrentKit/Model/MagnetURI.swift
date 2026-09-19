@@ -31,7 +31,7 @@ public enum MagnetError: Error, LocalizedError {
 		case .notAMagnetLink: "That is not a magnet link."
 		case .missingInfoHash: "The magnet link has no 'xt=urn:btih:' info-hash."
 		case .unsupportedHashFormat: "The info-hash is neither 40-character hex nor 32-character base32."
-		case .version2Unsupported: "This is a BitTorrent v2-only magnet link, which iTorrent does not support yet."
+		case .version2Unsupported: "This is a BitTorrent v2-only magnet link, which iTorrent+ does not support yet."
 		}
 	}
 }

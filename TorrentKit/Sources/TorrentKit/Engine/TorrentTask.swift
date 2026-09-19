@@ -697,7 +697,7 @@ public actor TorrentTask {
 				payload: ExtensionProtocol.handshakePayload(
 					metadataSize: metainfo?.rawInfoDictionary.count,
 					listenPort: port,
-					clientVersion: "iTorrent 1.0",
+					clientVersion: "iTorrent+ 1.0",
 					supportsPeerExchange: settings.isPeerExchangeEnabled && metainfo?.isPrivate != true
 				)
 			))

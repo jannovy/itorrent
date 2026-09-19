@@ -95,14 +95,14 @@ struct ExtensionTests {
 		let payload = ExtensionProtocol.handshakePayload(
 			metadataSize: 12_345,
 			listenPort: 51_413,
-			clientVersion: "iTorrent 1.0",
+			clientVersion: "iTorrent+ 1.0",
 			supportsPeerExchange: true
 		)
 		let parsed = ExtensionProtocol.RemoteHandshake(payload: payload)
 		#expect(parsed.metadataID == ExtensionProtocol.LocalID.metadata)
 		#expect(parsed.peerExchangeID == ExtensionProtocol.LocalID.peerExchange)
 		#expect(parsed.metadataSize == 12_345)
-		#expect(parsed.clientVersion == "iTorrent 1.0")
+		#expect(parsed.clientVersion == "iTorrent+ 1.0")
 	}
 
 	@Test("Metadata messages survive the bencode-plus-binary framing")

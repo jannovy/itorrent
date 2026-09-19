@@ -124,7 +124,7 @@ final class TorrentStore {
 		guard DownloadFolder.open(url) else {
 			message = Message(
 				title: "Could not use that folder",
-				detail: "iTorrent was not given permission to write to it.",
+				detail: "iTorrent+ was not given permission to write to it.",
 				isError: true
 			)
 			return

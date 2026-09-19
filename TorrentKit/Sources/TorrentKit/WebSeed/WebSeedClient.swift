@@ -85,7 +85,7 @@ public struct WebSeedClient: Sendable {
 	private func fetch(url: URL, byteRange: Range<Int64>) async throws -> Data {
 		let expected = Int(byteRange.upperBound - byteRange.lowerBound)
 		var request = URLRequest(url: url)
-		request.setValue("iTorrent/1.0", forHTTPHeaderField: "User-Agent")
+		request.setValue("iTorrent+/1.0", forHTTPHeaderField: "User-Agent")
 		request.setValue(
 			"bytes=\(byteRange.lowerBound)-\(byteRange.upperBound - 1)",
 			forHTTPHeaderField: "Range"

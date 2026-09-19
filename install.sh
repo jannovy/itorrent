@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Builds iTorrent and installs it on a connected iPhone or iPad.
+# Builds iTorrent+ and installs it on a connected iPhone or iPad.
 #
 # Why this builds from source instead of installing the .ipa from dist/:
 # an unsigned archive cannot be installed on any device. iOS only runs code
@@ -53,7 +53,7 @@ fail() {
 
 usage() {
 	cat <<EOF
-${BOLD}iTorrent installer${RESET}
+${BOLD}iTorrent+ installer${RESET}
 
 Builds the app and installs it on a connected iPhone or iPad, signing it with
 your own Apple ID.
@@ -230,7 +230,7 @@ explain_device_status() {
 				"Plug it in, unlock it, and leave it unlocked." \
 				"If it is already plugged in, unplug and replug the cable." ;;
 		oldos)
-			printf '%s\n' "iTorrent needs iOS $MINIMUM_IOS or later." ;;
+			printf '%s\n' "iTorrent+ needs iOS $MINIMUM_IOS or later." ;;
 		devmode)
 			printf '%s\n' \
 				"Turn on Developer Mode:" \
@@ -414,15 +414,15 @@ ok "Installed"
 step "Launching"
 
 if [[ "$SHOULD_LAUNCH" -eq 0 ]]; then
-	note "Skipped (--no-launch). Tap iTorrent on the home screen."
+	note "Skipped (--no-launch). Tap iTorrent+ on the home screen."
 elif xcrun devicectl device process launch --device "$DEVICE_UDID" --terminate-existing "$BUNDLE_ID" >/dev/null 2>&1; then
 	ok "Running on $device_name"
 else
 	# A locked device refuses the launch even though the install worked.
 	warn "Could not launch it — the device is probably locked."
-	note "Unlock it and tap iTorrent on the home screen."
+	note "Unlock it and tap iTorrent+ on the home screen."
 fi
 
-printf '\n%s✓ Done.%s iTorrent is on %s.\n\n' "$GREEN$BOLD" "$RESET" "$device_name"
+printf '\n%s✓ Done.%s iTorrent+ is on %s.\n\n' "$GREEN$BOLD" "$RESET" "$device_name"
 printf '  %sA signature from a free Apple ID stops working after seven days;%s\n' "$DIM" "$RESET"
 printf '  %srun this script again to renew it. A paid account lasts a year.%s\n\n' "$DIM" "$RESET"

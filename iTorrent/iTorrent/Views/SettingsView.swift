@@ -106,7 +106,7 @@ struct SettingsView: View {
 						Button(role: .destructive) {
 							Task { await store.useDefaultDownloadFolder() }
 						} label: {
-							Label("Use iTorrent's own folder", systemImage: "arrow.uturn.backward")
+							Label("Use iTorrent+'s own folder", systemImage: "arrow.uturn.backward")
 						}
 					}
 				} header: {
@@ -116,7 +116,7 @@ struct SettingsView: View {
 				}
 
 				Section("About") {
-					LabeledValue("Client", "iTorrent 1.0")
+					LabeledValue("Client", "iTorrent+ 1.0")
 					LabeledValue("Peer ID prefix", PeerID.clientPrefix, isMonospaced: true)
 					LabeledValue("Protocols", "BEP 3, 5, 9, 10, 11, 12, 15, 19, 23, 29, 47")
 					LabeledValue("Encryption", "MSE/PE (RC4)")
@@ -161,9 +161,9 @@ struct SettingsView: View {
 
 	private var storageFooter: String {
 		if store.isUsingDefaultDownloadFolder {
-			return "Downloads live in the app's Documents folder and are visible in Files under \"On My iPhone → iTorrent\". Choosing another folder works too — an external drive, iCloud Drive, or anywhere else the Files app can reach."
+			return "Downloads live in the app's Documents folder and are visible in Files under \"On My iPhone → iTorrent+\". Choosing another folder works too — an external drive, iCloud Drive, or anywhere else the Files app can reach."
 		}
-		return "Torrents added from now on are saved here. Ones already added keep the folder they were added with, so nothing moves behind your back. If this folder becomes unavailable — an unplugged drive, say — iTorrent falls back to its own folder and says so."
+		return "Torrents added from now on are saved here. Ones already added keep the folder they were added with, so nothing moves behind your back. If this folder becomes unavailable — an unplugged drive, say — iTorrent+ falls back to its own folder and says so."
 	}
 
 	private func speedPicker(_ title: String, selection: Binding<Int>) -> some View {

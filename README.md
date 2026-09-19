@@ -1,4 +1,4 @@
-# iTorrent
+# iTorrent+
 
 A BitTorrent client for iOS, written from scratch in Swift. No libtorrent, no
 C++, no third-party dependencies — the protocol stack is Swift and
@@ -45,7 +45,7 @@ Building is what lets `xcodebuild` request that profile for you.
 
 ## Download
 
-[**iTorrent 1.0 (.ipa, 2.0 MB)**](dist/iTorrent-1.0-unsigned.ipa) — `sha256
+[**iTorrent+ 1.0 (.ipa, 2.0 MB)**](dist/iTorrent-1.0-unsigned.ipa) — `sha256
 e04e7acf6c5f73ca4837c5913a7f21c9fbb89671250fa31df8722c65a8ef0e97`
 
 For AltStore, SideStore or Sideloadly, which do their own signing. If you have
@@ -234,7 +234,7 @@ Categories: `session`, `torrent`, `peer`, `tracker`, `dht`, `storage`.
 ## iOS specifics
 
 - Downloads go to `Documents/Downloads` by default, visible in Files under
-  "On My iPhone → iTorrent" (`UIFileSharingEnabled`). Settings can point them
+  "On My iPhone → iTorrent+" (`UIFileSharingEnabled`). Settings can point them
   at any folder the Files app can reach — an external drive, iCloud Drive —
   which is kept as a security-scoped bookmark and reopened at launch. Torrents
   already added keep the folder they were added with; only new ones follow the

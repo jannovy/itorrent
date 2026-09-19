@@ -18,7 +18,7 @@ enum DownloadFolder {
 
 	/// `Documents/Downloads`, which is what the app uses unless told otherwise.
 	/// It needs no bookmark and is the folder visible in Files under
-	/// "On My iPhone → iTorrent".
+	/// "On My iPhone → iTorrent+".
 	static var defaultURL: URL {
 		FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
 			.appendingPathComponent("Downloads", isDirectory: true)
@@ -101,9 +101,9 @@ enum DownloadFolderError: LocalizedError {
 	var errorDescription: String? {
 		switch self {
 		case let .unresolvable(reason):
-			"The download folder could not be found again (\(reason)). Downloads will go to iTorrent's own folder."
+			"The download folder could not be found again (\(reason)). Downloads will go to iTorrent+'s own folder."
 		case let .inaccessible(name):
-			"iTorrent no longer has permission to write to '\(name)'. Downloads will go to its own folder."
+			"iTorrent+ no longer has permission to write to '\(name)'. Downloads will go to its own folder."
 		case let .unbookmarkable(reason):
 			"That folder cannot be remembered for next time (\(reason))."
 		}
